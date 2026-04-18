@@ -19,18 +19,15 @@ if [ ! -f "${VERSION_FILE}" ]; then
   exit 1
 fi
 
-VERSION="$(cat "${VERSION_FILE}" | tr -d '[:space:]')"
+VERSION="$(tr -d '[:space:]' < "${VERSION_FILE}")"
 
-# SemVer validation: X.Y.Z, optionally with -prerelease suffix.
-case "${VERSION}" in
-  [0-9]*.[0-9]*.[0-9]*)
-    : # ok
-    ;;
-  *)
-    printf 'ERROR: version %s does not match SemVer X.Y.Z[-suffix]\n' "${VERSION}" >&2
-    exit 1
-    ;;
-esac
+# SemVer: X.Y.Z with optional -prerelease and +build metadata.
+# No leading zeros on numeric identifiers (per semver.org §2).
+if ! printf '%s' "${VERSION}" | \
+     grep -Eq '^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(-[0-9A-Za-z.-]+)?(\+[0-9A-Za-z.-]+)?$'; then
+  printf 'ERROR: version %s does not match SemVer X.Y.Z[-prerelease][+build]\n' "${VERSION}" >&2
+  exit 1
+fi
 
 # Render addon/VERSION
 printf '%s\n' "${VERSION}" > "${REPO_ROOT}/addon/VERSION"

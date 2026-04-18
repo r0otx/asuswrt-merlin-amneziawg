@@ -7,7 +7,7 @@ include build/versions.env
 export
 
 .PHONY: help
-help:
+help: ## Show this help message
 	@awk 'BEGIN { FS=":.*##"; printf "Targets:\n" } \
 	      /^[a-zA-Z0-9_.-]+:.*##/ { printf "  %-22s %s\n", $$1, $$2 }' $(MAKEFILE_LIST)
 
