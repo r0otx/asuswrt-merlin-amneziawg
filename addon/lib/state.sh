@@ -3,6 +3,14 @@
 #
 # Uses atomic write (tmp + mv) to avoid partial reads from concurrent webui polls.
 # custom_settings.txt format: one line per entry, space-separated "key value".
+#
+# Caveats:
+#   - state_get returns empty for both "missing key" and "empty value" — callers
+#     that need to distinguish presence must add state_has in Module 2.
+#   - Values must not contain newlines; leading/trailing whitespace is not
+#     preserved across round-trip.
+#   - Atomic iff AMNEZIAWG_CUSTOM_SETTINGS and its directory share one filesystem
+#     (true by default on /jffs; override at your own risk).
 
 : "${AMNEZIAWG_CUSTOM_SETTINGS:=/jffs/addons/custom_settings.txt}"
 
@@ -50,7 +58,7 @@ state_delete() {
 
 state_list_awg_keys() {
     _state_ensure_file
-    awk '/^awg_/ { print $1 }' "${AMNEZIAWG_CUSTOM_SETTINGS}"
+    awk '$1 ~ /^awg_/ { print $1 }' "${AMNEZIAWG_CUSTOM_SETTINGS}"
 }
 
 # --- v1 migration (real logic: Module 2) ------------------------------------

@@ -24,8 +24,8 @@ teardown() {
     grep -q "WARN  careful" "${AMNEZIAWG_LOG_FILE}"
 }
 
-@test "log_error writes ERROR-prefixed line and returns non-zero when used as guard" {
-    log_error "bang" || true
+@test "log_error writes ERROR-prefixed line" {
+    log_error "bang"
     grep -q "ERROR bang" "${AMNEZIAWG_LOG_FILE}"
 }
 
