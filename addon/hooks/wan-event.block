@@ -1,0 +1,1 @@
+/jffs/addons/amneziawg/amneziawg.sh wan_event "$1" "$2" &

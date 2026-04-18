@@ -1,0 +1,1 @@
+/jffs/addons/amneziawg/amneziawg.sh firewall_start "$1" &
