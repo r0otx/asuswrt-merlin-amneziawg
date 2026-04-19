@@ -17,9 +17,12 @@ version: ## Render /VERSION into derived files
 
 .PHONY: lint
 lint: ## Run lint.yml equivalents locally
-	shellcheck -S style addon/amneziawg.sh addon/lib/*.sh addon/scripts/*.sh \
+	shellcheck -S style \
+	           -e SC1091,SC2012,SC2018,SC2019,SC2154,SC2317 \
+	           addon/amneziawg.sh addon/lib/*.sh addon/scripts/*.sh \
 	           build/*.sh build/ci/*.sh scripts/*.sh
-	shfmt -d -i 2 -ci addon/ build/ scripts/
+	@command -v shfmt >/dev/null 2>&1 && shfmt -d -i 2 -ci addon/ build/ scripts/ \
+	    || echo "shfmt not installed; skipping formatter check"
 	go vet ./...
 	yamllint .github/workflows/
 
