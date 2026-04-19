@@ -49,7 +49,7 @@ RUN make -C tools \
        CC=gcc \
        LD=ld \
        STRIP=strip \
-       CFLAGS="-static -O2" \
+       CFLAGS="-static -O2 -I uapi/linux" \
        LDFLAGS="-static" \
        OUT_DIR=/out
 
