@@ -344,3 +344,91 @@ config_emit() {
     chmod 600 "${_tmp}"
     mv "${_tmp}" "${_target}"
 }
+
+# ------------------------------ config_import_from_stdin ------------------------------
+
+# Parse an Amnezia .conf from stdin. On success, persist into custom_settings
+# and set awg_enabled=1. On validation failure, state is untouched.
+config_import_from_stdin() {
+    _imp_tmp="$(mktemp)"
+    cat > "${_imp_tmp}"
+
+    # Parse into _imp_<key> vars. awk emits "key<TAB>value" lines.
+    _imp_kv="$(mktemp)"
+    awk -F'=' '
+        /^\[Interface\]/ { section="interface"; next }
+        /^\[Peer\]/      { section="peer"; next }
+        /^[[:space:]]*#/ { next }
+        /^[[:space:]]*$/ { next }
+        NF < 2 { next }
+        {
+            k=$1; v=$0
+            sub(/^[^=]*=[[:space:]]*/,"",v)
+            sub(/[[:space:]]*$/,"",v)
+            sub(/[[:space:]]*$/,"",k)
+            sub(/^[[:space:]]*/,"",k)
+            k=tolower(k)
+            if (section=="interface") {
+                if      (k=="privatekey") print "privatekey\t"v
+                else if (k=="address")    print "address\t"v
+                else if (k=="dns")        print "dns\t"v
+                else if (k=="mtu")        print "mtu\t"v
+                else if (k=="jc")         print "jc\t"v
+                else if (k=="jmin")       print "jmin\t"v
+                else if (k=="jmax")       print "jmax\t"v
+                else if (k~/^s[1-4]$/)    print k"\t"v
+                else if (k~/^h[1-4]$/)    print k"\t"v
+                else if (k~/^i[1-5]$/)    print k"\t"v
+            } else if (section=="peer") {
+                if      (k=="publickey")           print "peer_publickey\t"v
+                else if (k=="presharedkey")        print "peer_presharedkey\t"v
+                else if (k=="endpoint")            print "peer_endpoint\t"v
+                else if (k=="allowedips")          print "peer_allowed_ips\t"v
+                else if (k=="persistentkeepalive") print "peer_keepalive\t"v
+            }
+        }
+    ' "${_imp_tmp}" > "${_imp_kv}"
+    rm -f "${_imp_tmp}"
+
+    # Clear all _cfg_* to avoid contamination from previous state.
+    for _key in ${_CFG_KEYS}; do
+        eval "_cfg_${_key}=\"\""
+    done
+
+    # Read parsed key-value pairs and populate _cfg_* vars.
+    while IFS="$(printf '\t')" read -r _k _v; do
+        [ -z "${_k}" ] && continue
+        case "${_k}" in
+            privatekey|address|dns|mtu|jc|jmin|jmax|\
+            s1|s2|s3|s4|h1|h2|h3|h4|i1|i2|i3|i4|i5|\
+            peer_publickey|peer_presharedkey|peer_endpoint|\
+            peer_allowed_ips|peer_keepalive)
+                eval "_cfg_${_k}=\"\${_v}\""
+                ;;
+        esac
+    done < "${_imp_kv}"
+    rm -f "${_imp_kv}"
+
+    # If no privatekey was parsed, the file is not a valid conf.
+    if [ -z "${_cfg_privatekey}" ]; then
+        log_error "import: no PrivateKey found; is this a wg/awg .conf file?"
+        return 1
+    fi
+
+    # Validate BEFORE persisting. On failure nothing is written.
+    if ! config_validate; then
+        log_error "import: validation failed, not persisting"
+        return 1
+    fi
+
+    # Persist all imported fields.
+    for _key in ${_CFG_KEYS}; do
+        eval "_imp_val=\"\${_cfg_${_key}}\""
+        if [ -n "${_imp_val}" ]; then
+            state_set "awg_${_key}" "${_imp_val}"
+        fi
+    done
+    state_set "awg_enabled" "1"
+    log_info "import: config saved, enabled"
+    return 0
+}

@@ -363,3 +363,49 @@ _set_full_config_from_amnezia2() {
     ! grep -q '^I1 '             "${TMPDIR_TEST}/awg0.conf"
     ! grep -q '^PresharedKey '   "${TMPDIR_TEST}/awg0.conf"
 }
+
+# --- config_import_from_stdin ---
+
+@test "config_import_from_stdin parses valid Amnezia 2.0 conf" {
+    config_import_from_stdin < "${BATS_TEST_DIRNAME}/fixtures/amnezia-2.0-import.conf"
+    run state_get "awg_privatekey"
+    [ "$output" = "aGFoYWhhaGFoYWhhaGFoYWhhaGFoYWhhaGFoYWhhaGE=" ]
+    run state_get "awg_h1"
+    [ "$output" = "2072158144-2145681082" ]
+    run state_get "awg_i1"
+    [ "$output" = "<b 0xabcd><r 8><t>" ]
+    run state_get "awg_peer_endpoint"
+    [ "$output" = "vpn.example.com:51820" ]
+    run state_get "awg_peer_allowed_ips"
+    [ "$output" = "0.0.0.0/0,::/0" ]
+}
+
+@test "config_import_from_stdin fails on bad H1" {
+    ! config_import_from_stdin < "${BATS_TEST_DIRNAME}/fixtures/bad-h1.conf"
+}
+
+@test "config_import_from_stdin fails on bad key" {
+    ! config_import_from_stdin < "${BATS_TEST_DIRNAME}/fixtures/bad-key.conf"
+}
+
+@test "config_import_from_stdin fails on bad endpoint" {
+    ! config_import_from_stdin < "${BATS_TEST_DIRNAME}/fixtures/bad-endpoint.conf"
+}
+
+@test "config_import_from_stdin fails on non-conf garbage" {
+    ! printf "random text\nno sections\n" | config_import_from_stdin
+}
+
+@test "config_import_from_stdin sets awg_enabled=1 after successful import" {
+    state_delete "awg_enabled"
+    config_import_from_stdin < "${BATS_TEST_DIRNAME}/fixtures/amnezia-2.0-import.conf"
+    run state_get "awg_enabled"
+    [ "$output" = "1" ]
+}
+
+@test "config_import_from_stdin does not partially persist on validation error" {
+    state_set "awg_privatekey" "preexisting"
+    ! config_import_from_stdin < "${BATS_TEST_DIRNAME}/fixtures/bad-h1.conf"
+    run state_get "awg_privatekey"
+    [ "$output" = "preexisting" ]
+}
