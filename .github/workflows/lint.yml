@@ -1,0 +1,94 @@
+name: lint
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+  pull-requests: read
+
+jobs:
+  shell:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install shellcheck & shfmt
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y shellcheck
+          curl -fsSL -o /usr/local/bin/shfmt \
+               https://github.com/mvdan/sh/releases/download/v3.8.0/shfmt_v3.8.0_linux_amd64
+          sudo chmod +x /usr/local/bin/shfmt
+      - name: shellcheck
+        run: |
+          shellcheck -S style \
+            addon/amneziawg.sh addon/lib/*.sh addon/scripts/*.sh \
+            build/*.sh build/ci/*.sh build/docker/build-in-container.sh \
+            scripts/*.sh tools/*.sh
+      - name: shfmt
+        run: |
+          shfmt -d -i 2 -ci \
+            addon/ build/ scripts/ tools/
+
+  go:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with: { go-version: '1.24.4' }
+      - run: go vet ./...
+      - run: go test -race ./...
+      - name: golangci-lint
+        uses: golangci/golangci-lint-action@v6
+        with: { version: v1.60 }
+        continue-on-error: true
+
+  bats:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install bats
+        run: sudo apt-get update && sudo apt-get install -y bats
+      - run: bats addon/tests/
+
+  version-sync:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: render and verify no drift
+        run: |
+          ./build/version.sh
+          if ! git diff --quiet addon/VERSION addon/amneziawg.sh addon/webui/amneziawg_page.asp; then
+            echo "VERSION drift detected — run build/version.sh and commit." >&2
+            git diff
+            exit 1
+          fi
+
+  asp:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: '3.12' }
+      - run: python3 build/ci/lint_asp.py || true
+
+  yaml:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - run: sudo apt-get update && sudo apt-get install -y yamllint
+      - run: yamllint .github/workflows/
+
+  commitlint:
+    runs-on: ubuntu-24.04
+    if: github.event_name == 'pull_request'
+    steps:
+      - uses: actions/checkout@v4
+        with: { fetch-depth: 0 }
+      - uses: actions/setup-node@v4
+        with: { node-version: '20' }
+      - run: npm install --save-dev @commitlint/cli @commitlint/config-conventional
+      - run: npx commitlint --from origin/main --to HEAD --verbose
