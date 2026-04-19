@@ -1,0 +1,120 @@
+name: release
+
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: write
+  id-token: write   # OIDC for cosign keyless
+
+jobs:
+  release:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with: { fetch-depth: 0 }
+
+      - name: Validate tag matches /VERSION
+        run: |
+          tag_version="${GITHUB_REF_NAME#v}"
+          file_version="$(tr -d '[:space:]' < VERSION)"
+          if [ "${tag_version}" != "${file_version}" ]; then
+            echo "::error::tag ${GITHUB_REF_NAME} does not match /VERSION ${file_version}"
+            exit 1
+          fi
+
+      - name: Determine channel
+        id: chan
+        run: |
+          case "${GITHUB_REF_NAME}" in
+            *-rc.*)   echo "channel=rc" >> "$GITHUB_OUTPUT" ;;
+            *-beta.*) echo "channel=beta" >> "$GITHUB_OUTPUT" ;;
+            *)        echo "channel=stable" >> "$GITHUB_OUTPUT" ;;
+          esac
+
+      - name: Set up QEMU / Buildx
+        uses: docker/setup-qemu-action@v3
+      - uses: docker/setup-buildx-action@v3
+
+      - name: Render version
+        run: ./build/version.sh
+
+      - name: Build aarch64
+        run: |
+          mkdir -p dist/aarch64
+          docker build \
+            --platform linux/arm64 \
+            -f build/docker/Dockerfile.aarch64 \
+            --build-arg SOURCE_DATE_EPOCH=$(git log -1 --format=%ct) \
+            --output type=local,dest=dist/aarch64 \
+            --target output \
+            .
+
+      - name: Build armv7
+        run: |
+          mkdir -p dist/armv7
+          docker build \
+            --platform linux/arm/v7 \
+            -f build/docker/Dockerfile.armv7 \
+            --build-arg SOURCE_DATE_EPOCH=$(git log -1 --format=%ct) \
+            --output type=local,dest=dist/armv7 \
+            --target output \
+            .
+
+      - name: Aggregate artifacts + SHA256SUMS
+        run: |
+          mkdir -p release
+          cp dist/aarch64/out/*.ipk dist/armv7/out/*.ipk release/
+          (cd release && sha256sum *.ipk > SHA256SUMS)
+
+      - name: Install cosign
+        uses: sigstore/cosign-installer@v3
+
+      - name: Sign SHA256SUMS (keyless)
+        run: |
+          cosign sign-blob --yes --output-signature release/SHA256SUMS.asc release/SHA256SUMS
+
+      - name: Generate CHANGELOG section
+        uses: orhun/git-cliff-action@v3
+        with:
+          config: cliff.toml
+          args: --latest --strip header
+        env:
+          OUTPUT: release/RELEASE_NOTES.md
+
+      - name: Publish GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            release/*.ipk
+            release/SHA256SUMS
+            release/SHA256SUMS.asc
+          body_path: release/RELEASE_NOTES.md
+          prerelease: ${{ steps.chan.outputs.channel != 'stable' }}
+
+      - name: Update opkg feed on gh-pages
+        run: |
+          git fetch origin gh-pages:gh-pages || git checkout --orphan gh-pages
+          CHANNEL=${{ steps.chan.outputs.channel }}
+          for arch_pair in "aarch64:aarch64-k3.10" "armv7:armv7sf-k2.6"; do
+            src_arch="${arch_pair%%:*}"
+            feed_arch="${arch_pair##*:}"
+            mkdir -p "public/${CHANNEL}/${feed_arch}"
+            cp "dist/${src_arch}/out/"*.ipk "public/${CHANNEL}/${feed_arch}/" || true
+            cp release/*"_all.ipk" "public/${CHANNEL}/${feed_arch}/" || true
+          done
+          pip install --user opkg-utils 2>/dev/null || true
+          for d in public/${CHANNEL}/*/; do
+            (cd "${d}" && \
+             python3 -c "import opkg_utils" 2>/dev/null || \
+             curl -fsSL https://git.yoctoproject.org/opkg-utils/plain/opkg-make-index \
+                  -o opkg-make-index && chmod +x opkg-make-index)
+            (cd "${d}" && ./opkg-make-index . > Packages && gzip -n -k -f Packages)
+          done
+          git config user.email "ci@github.com"
+          git config user.name "github-actions"
+          git add public/
+          git commit -m "chore(feed): update ${CHANNEL} for ${GITHUB_REF_NAME}" || true
+          git push origin gh-pages
+        continue-on-error: true
