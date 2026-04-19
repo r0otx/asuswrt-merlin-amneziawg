@@ -33,24 +33,24 @@ daemon: ## Build amneziawg-go binary natively (upstream Makefile)
 	$(MAKE) -f Makefile.upstream amneziawg-go
 
 .PHONY: build-docker-aarch64
-build-docker-aarch64: ## Build aarch64 ipks via Docker
-	docker build --platform linux/arm64 \
+build-docker-aarch64: ## Build aarch64 ipks via Docker buildx
+	mkdir -p dist/aarch64
+	docker buildx build --platform linux/arm64 \
 	             -f build/docker/Dockerfile.aarch64 \
 	             --build-arg SOURCE_DATE_EPOCH=$(shell git log -1 --format=%ct) \
-	             -t amneziago-builder:aarch64 .
-	docker run --rm \
-	           -v "$(REPO_ROOT)/dist/aarch64:/out" \
-	           amneziago-builder:aarch64
+	             --target output \
+	             --output type=local,dest=$(REPO_ROOT)/dist/aarch64 \
+	             .
 
 .PHONY: build-docker-armv7
-build-docker-armv7: ## Build armv7sf ipks via Docker
-	docker build --platform linux/arm/v7 \
+build-docker-armv7: ## Build armv7sf ipks via Docker buildx
+	mkdir -p dist/armv7
+	docker buildx build --platform linux/arm/v7 \
 	             -f build/docker/Dockerfile.armv7 \
 	             --build-arg SOURCE_DATE_EPOCH=$(shell git log -1 --format=%ct) \
-	             -t amneziago-builder:armv7 .
-	docker run --rm \
-	           -v "$(REPO_ROOT)/dist/armv7:/out" \
-	           amneziago-builder:armv7
+	             --target output \
+	             --output type=local,dest=$(REPO_ROOT)/dist/armv7 \
+	             .
 
 .PHONY: build-all
 build-all: build-docker-aarch64 build-docker-armv7 ## Build all ipks for both arches
