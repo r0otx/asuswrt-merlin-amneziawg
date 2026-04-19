@@ -61,13 +61,153 @@ state_list_awg_keys() {
     awk '$1 ~ /^awg_/ { print $1 }' "${AMNEZIAWG_CUSTOM_SETTINGS}"
 }
 
-# --- v1 migration (real logic: Module 2) ------------------------------------
+# --- v1 migration -----------------------------------------------------------
+
+# v1→v2 key rename map, colon-separated "v1:v2" pairs.
+_V1_KEY_MAP="amneziawg_privatekey:awg_privatekey
+amneziawg_publickey:awg_peer_publickey
+amneziawg_presharedkey:awg_peer_presharedkey
+amneziawg_address:awg_address
+amneziawg_endpoint:awg_peer_endpoint
+amneziawg_allowedips:awg_peer_allowed_ips
+amneziawg_dns:awg_dns
+amneziawg_mtu:awg_mtu
+amneziawg_jc:awg_jc
+amneziawg_jmin:awg_jmin
+amneziawg_jmax:awg_jmax
+amneziawg_s1:awg_s1
+amneziawg_s2:awg_s2
+amneziawg_s3:awg_s3
+amneziawg_s4:awg_s4
+amneziawg_h1:awg_h1
+amneziawg_h2:awg_h2
+amneziawg_h3:awg_h3
+amneziawg_h4:awg_h4
+amneziawg_i1:awg_i1
+amneziawg_i2:awg_i2
+amneziawg_i3:awg_i3
+amneziawg_i4:awg_i4
+amneziawg_i5:awg_i5
+amneziawg_persistent_keepalive:awg_peer_keepalive
+amneziawg_enabled:awg_enabled"
+
+: "${AMNEZIAWG_V1_ADDON_DIR:=/jffs/addons/amneziawg}"
+: "${AMNEZIAWG_V1_OPT_DIR:=/opt/amneziawg}"
+: "${AMNEZIAWG_BACKUP_DIR:=/opt/etc/amneziawg/backups}"
+: "${AMNEZIAWG_V2_CONF:=/opt/etc/amneziawg/awg0.conf}"
+: "${AMNEZIAWG_UNMIGRATED_KEYS:=/opt/etc/amneziawg/backups/v1-unmigrated-keys.txt}"
+: "${AMNEZIAWG_MIGRATED_FLAG:=/jffs/addons/amneziawg/.migrated-from-v1}"
+: "${AMNEZIAWG_JFFS_SCRIPTS:=/jffs/scripts}"
+: "${AWG_VERSION:=0.0.0-dev}"
+
+_state_ensure_backup_dir() {
+    mkdir -p "${AMNEZIAWG_BACKUP_DIR}"
+}
+
+_state_rotate_backups() {
+    _prefix="$1"
+    _state_ensure_backup_dir
+    # Keep 5 newest tar.gz matching prefix.
+    # shellcheck disable=SC2012
+    ls -t "${AMNEZIAWG_BACKUP_DIR}/${_prefix}"*.tar.gz 2>/dev/null \
+        | awk 'NR>5' \
+        | xargs rm -f 2>/dev/null || true
+}
+
 migrate_from_v1() {
-    log_warn "migrate_from_v1 is stubbed in Module 1 — real logic in Module 2"
+    # Detect: v1 addon dir exists, no lib/ subdir, no flag.
+    if [ ! -f "${AMNEZIAWG_V1_ADDON_DIR}/amneziawg.sh" ] \
+       || [ -d "${AMNEZIAWG_V1_ADDON_DIR}/lib" ] \
+       || [ -f "${AMNEZIAWG_MIGRATED_FLAG}" ]; then
+        log_info "migrate_from_v1: no v1 detected, skipping"
+        return 0
+    fi
+
+    log_info "migrate_from_v1: v1 detected, starting migration"
+
+    # Stop v1 tunnel (best-effort)
+    "${AMNEZIAWG_V1_ADDON_DIR}/amneziawg.sh" stop 2>/dev/null || true
+    pkill -TERM -x amneziawg-go 2>/dev/null || true
+    sleep 1
+
+    # Backup
+    _ts="$(date +%Y%m%d-%H%M%S)"
+    _state_ensure_backup_dir
+    _bkp="${AMNEZIAWG_BACKUP_DIR}/backup-v1-${_ts}.tar.gz"
+    _keys_file="${AMNEZIAWG_BACKUP_DIR}/backup-v1-${_ts}-keys.txt"
+
+    tar czf "${_bkp}" -C / \
+        "${AMNEZIAWG_V1_OPT_DIR#/}" \
+        "${AMNEZIAWG_V1_ADDON_DIR#/}" 2>/dev/null || \
+        log_warn "migrate_from_v1: partial backup (some paths missing)"
+
+    awk '/^amneziawg_/ { print }' "${AMNEZIAWG_CUSTOM_SETTINGS}" \
+        > "${_keys_file}" 2>/dev/null || :
+    _state_rotate_backups "backup-v1-"
+
+    log_info "migrate_from_v1: backup saved at ${_bkp}"
+
+    # Copy v1 awg0.conf to v2 location
+    if [ -f "${AMNEZIAWG_V1_OPT_DIR}/awg0.conf" ]; then
+        mkdir -p "$(dirname "${AMNEZIAWG_V2_CONF}")"
+        cp "${AMNEZIAWG_V1_OPT_DIR}/awg0.conf" "${AMNEZIAWG_V2_CONF}"
+        chmod 600 "${AMNEZIAWG_V2_CONF}"
+        log_info "migrate_from_v1: copied awg0.conf to ${AMNEZIAWG_V2_CONF}"
+    fi
+
+    # Translate keys — use file descriptor 3 to avoid subshell scope issue with `while`
+    _map_tmp="$(mktemp)"
+    printf '%s\n' "${_V1_KEY_MAP}" > "${_map_tmp}"
+    while IFS=':' read -r _v1 _v2; do
+        [ -n "${_v1}" ] || continue
+        _val="$(state_get "${_v1}")"
+        if [ -n "${_val}" ]; then
+            state_set "${_v2}" "${_val}"
+            state_delete "${_v1}"
+        fi
+    done < "${_map_tmp}"
+    rm -f "${_map_tmp}"
+
+    # Save remaining unmigrated amneziawg_* keys
+    _state_ensure_backup_dir
+    awk '/^amneziawg_/ { print }' "${AMNEZIAWG_CUSTOM_SETTINGS}" \
+        > "${AMNEZIAWG_UNMIGRATED_KEYS}" 2>/dev/null || :
+
+    # Remove v1 hook invocations from /jffs/scripts/* (strict line pattern).
+    for _hook in service-event firewall-start wan-event services-start; do
+        _f="${AMNEZIAWG_JFFS_SCRIPTS}/${_hook}"
+        [ -f "${_f}" ] || continue
+        sed -i.bak '\|^[[:space:]]*/jffs/addons/amneziawg/amneziawg\.sh|d' "${_f}" 2>/dev/null || :
+        rm -f "${_f}.bak"
+    done
+
+    # Write migration flag
+    mkdir -p "$(dirname "${AMNEZIAWG_MIGRATED_FLAG}")"
+    {
+        printf 'migrated_at=%s\n' "${_ts}"
+        printf 'v2_version=%s\n'  "${AWG_VERSION}"
+        printf 'backup=%s\n'      "${_bkp}"
+    } > "${AMNEZIAWG_MIGRATED_FLAG}"
+
+    state_set "awg_last_migrated_from" "v1"
+    log_info "migrate_from_v1: complete"
     return 0
 }
 
 backup_before_remove() {
-    log_warn "backup_before_remove is stubbed in Module 1 — real logic in Module 2"
+    _ts="$(date +%Y%m%d-%H%M%S)"
+    _state_ensure_backup_dir
+    _bkp="${AMNEZIAWG_BACKUP_DIR}/backup-v2-${_ts}.tar.gz"
+    _keys_file="${AMNEZIAWG_BACKUP_DIR}/backup-v2-${_ts}-keys.txt"
+
+    tar czf "${_bkp}" -C / \
+        opt/etc/amneziawg \
+        jffs/addons/amneziawg/.migrated-from-v1 2>/dev/null || :
+
+    awk '/^awg_/ { print }' "${AMNEZIAWG_CUSTOM_SETTINGS}" \
+        > "${_keys_file}" 2>/dev/null || :
+    _state_rotate_backups "backup-v2-"
+
+    log_info "backup_before_remove: saved ${_bkp}"
     return 0
 }

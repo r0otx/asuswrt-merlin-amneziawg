@@ -58,18 +58,6 @@ teardown() {
     ! echo "$output" | grep -q "^other_key$"
 }
 
-@test "migrate_from_v1 is a stub that returns 0 and logs warning" {
-    run migrate_from_v1
-    [ "$status" -eq 0 ]
-    grep -q "migrate_from_v1 is stubbed in Module 1" "${AMNEZIAWG_LOG_FILE}"
-}
-
-@test "backup_before_remove is a stub that returns 0 and logs warning" {
-    run backup_before_remove
-    [ "$status" -eq 0 ]
-    grep -q "backup_before_remove is stubbed in Module 1" "${AMNEZIAWG_LOG_FILE}"
-}
-
 @test "state_set writes atomically via .tmp + mv" {
     # Simulate: file is watched by a concurrent reader; write must use temp file.
     state_set "awg_test" "atomic"
