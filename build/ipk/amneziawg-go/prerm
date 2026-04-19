@@ -1,0 +1,4 @@
+#!/bin/sh
+# Stop only the amneziawg-go daemon (exact match — avoids killing tools/awg).
+pkill -TERM -x amneziawg-go 2>/dev/null || true
+exit 0

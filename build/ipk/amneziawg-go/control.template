@@ -1,0 +1,15 @@
+Package: amneziawg-go
+Version: @VERSION@
+Source: https://github.com/amnezia-vpn/amneziawg-go
+License: MIT
+Section: net
+Priority: optional
+Maintainer: r00t <r00tx@mail.ru>
+Architecture: @ARCH@
+Installed-Size: @INSTALLED_SIZE@
+Depends: kmod-tun, libc
+Description: Userspace AmneziaWG VPN daemon (Go implementation).
+ AmneziaWG is a fork of WireGuard with obfuscation against deep-packet
+ inspection. This package ships the userspace daemon only; use with
+ amneziawg-tools for configuration and amneziawg-merlin-addon for WebUI
+ integration on Asuswrt-Merlin routers.

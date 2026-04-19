@@ -1,0 +1,16 @@
+#!/bin/sh
+set -eu
+
+# Ensure /dev/net/tun exists
+mkdir -p /dev/net
+if [ ! -c /dev/net/tun ]; then
+    mknod -m 600 /dev/net/tun c 10 200
+fi
+
+# Warn if kernel TUN support is missing
+if ! grep -q '^tun ' /proc/modules 2>/dev/null; then
+    if ! modprobe tun 2>/dev/null; then
+        printf 'WARN: TUN kernel module not loaded; amneziawg-go will fail until it is.\n' >&2
+    fi
+fi
+exit 0
