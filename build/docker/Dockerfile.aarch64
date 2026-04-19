@@ -57,7 +57,7 @@ RUN $(MAKE) -C tools \
 
 # --- Stage 3: IPK builder ----------------------------------------------------
 FROM alpine:${ALPINE_TAG} AS ipk-builder
-RUN apk add --no-cache bash tar gzip coreutils findutils sha256sum git
+RUN apk add --no-cache bash tar gzip coreutils findutils git
 WORKDIR /work
 COPY --from=go-builder  /out/amneziawg-go  /in/bin/amneziawg-go
 COPY --from=c-builder   /out/awg           /in/bin/awg
