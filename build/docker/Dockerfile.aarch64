@@ -1,0 +1,78 @@
+# build/docker/Dockerfile.aarch64 — cross-builds amneziawg-go and amneziawg-tools for AArch64 Entware.
+# Output: /out/amneziawg-go, /out/awg, /out/awg-quick in the final stage.
+
+# syntax=docker/dockerfile:1.6
+
+ARG GO_VERSION=1.24.4
+ARG ALPINE_TAG=3.19
+ARG ALPINE_DIGEST
+
+# --- Stage 1: Go builder -----------------------------------------------------
+FROM --platform=$BUILDPLATFORM golang:${GO_VERSION}-alpine AS go-builder
+ARG SOURCE_DATE_EPOCH
+ENV SOURCE_DATE_EPOCH=${SOURCE_DATE_EPOCH} \
+    CGO_ENABLED=0 \
+    GOOS=linux \
+    GOARCH=arm64 \
+    GOFLAGS=-mod=vendor
+
+WORKDIR /src
+COPY go.mod go.sum ./
+# Workspace includes upstream source at root.
+COPY main.go version.go format_test.go ./
+COPY device  ./device
+COPY conn    ./conn
+COPY tun     ./tun
+COPY ipc     ./ipc
+COPY outline ./outline
+COPY ratelimiter ./ratelimiter
+COPY replay  ./replay
+COPY rwcancel ./rwcancel
+COPY tai64n  ./tai64n
+COPY tests   ./tests
+RUN go mod download && \
+    go build -trimpath -buildvcs=false \
+             -ldflags "-s -w -buildid=" \
+             -o /out/amneziawg-go .
+
+# --- Stage 2: C tools builder ------------------------------------------------
+FROM --platform=$BUILDPLATFORM alpine:${ALPINE_TAG} AS c-builder
+ARG SOURCE_DATE_EPOCH
+ENV SOURCE_DATE_EPOCH=${SOURCE_DATE_EPOCH}
+RUN apk add --no-cache \
+      bash make gcc musl-dev \
+      gcc-aarch64-none-elf binutils-aarch64-none-elf
+WORKDIR /src
+COPY tools/ ./tools/
+COPY build/versions.env ./build/
+RUN ./tools/fetch.sh
+RUN $(MAKE) -C tools \
+       ARCH=aarch64 \
+       CC=aarch64-none-elf-gcc \
+       LD=aarch64-none-elf-ld \
+       STRIP=aarch64-none-elf-strip \
+       CFLAGS="-static -O2" \
+       LDFLAGS="-static" \
+       OUT_DIR=/out
+
+# --- Stage 3: IPK builder ----------------------------------------------------
+FROM alpine:${ALPINE_TAG} AS ipk-builder
+RUN apk add --no-cache bash tar gzip coreutils findutils sha256sum git
+WORKDIR /work
+COPY --from=go-builder  /out/amneziawg-go  /in/bin/amneziawg-go
+COPY --from=c-builder   /out/awg           /in/bin/awg
+COPY --from=c-builder   /out/awg-quick     /in/bin/awg-quick
+COPY VERSION build/ build/
+COPY addon/ addon/
+COPY tools/VERSION tools/VERSION
+ARG SOURCE_DATE_EPOCH
+ENV SOURCE_DATE_EPOCH=${SOURCE_DATE_EPOCH} \
+    TARGET_ARCH=aarch64-3.10 \
+    OUT_DIR=/out
+COPY build/docker/build-in-container.sh /usr/local/bin/build-in-container.sh
+RUN chmod +x /usr/local/bin/build-in-container.sh
+CMD ["/usr/local/bin/build-in-container.sh"]
+
+# --- Final stage: minimal output extractor -----------------------------------
+FROM scratch AS output
+COPY --from=ipk-builder /out/ /out/
