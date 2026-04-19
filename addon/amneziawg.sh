@@ -10,6 +10,11 @@ AWG_VERSION="0.0.0-dev"
 . "${AWG_ADDON_DIR}/lib/state.sh"
 . "${AWG_ADDON_DIR}/lib/hooks.sh"
 . "${AWG_ADDON_DIR}/lib/ui.sh"
+. "${AWG_ADDON_DIR}/lib/config.sh"
+. "${AWG_ADDON_DIR}/lib/tunnel.sh"
+. "${AWG_ADDON_DIR}/lib/status.sh"
+. "${AWG_ADDON_DIR}/lib/watchdog.sh"
+. "${AWG_ADDON_DIR}/lib/events.sh"
 . "${AWG_ADDON_DIR}/lib/install.sh"
 . "${AWG_ADDON_DIR}/lib/firewall.sh"
 . "${AWG_ADDON_DIR}/lib/pbr.sh"
@@ -24,14 +29,23 @@ Lifecycle:
   uninstall         - reverse install (used from .ipk prerm)
   version           - print AWG_VERSION
 
+Tunnel:
+  start             - bring awg0 up
+  stop              - bring awg0 down
+  restart           - stop + start
+  reload            - restart only if config changed
+  status            - emit status JSON and print it
+  watchdog          - one periodic tick (called from cron every 60s)
+  import            - parse a .conf from stdin and persist into custom_settings
+
 Hook handlers (invoked by /jffs/scripts/* demarcated blocks):
   service_event EVENT TARGET
   firewall_start WAN_IF
   wan_event UNIT STATE
   services_start
 
-Not-yet-implemented subcommands (Module 2/3/4):
-  start, stop, restart, status, update_geo, mount_ui, watchdog
+Not implemented yet (M5/v2.x):
+  update_geo, check_update, update
 EOF
 }
 
@@ -48,12 +62,22 @@ case "${cmd}" in
     uninstall)      uninstall_run ;;
     version)        printf '%s\n' "${AWG_VERSION}" ;;
 
-    service_event)  _not_implemented service_event ;;
-    firewall_start) _not_implemented firewall_start ;;
-    wan_event)      _not_implemented wan_event ;;
-    services_start) _not_implemented services_start ;;
+    service_event)  event_service "$@" ;;
+    firewall_start) event_firewall "$@" ;;
+    wan_event)      event_wan "$@" ;;
+    services_start) event_services_start ;;
 
-    start|stop|restart|status|update_geo|mount_ui|watchdog|check_update|update)
+    start)          tunnel_start ;;
+    stop)           tunnel_stop ;;
+    restart)        tunnel_restart ;;
+    reload)         tunnel_reload ;;
+    status)         status_emit_json; cat "${AMNEZIAWG_RUNTIME:-/tmp/amneziawg}/status.json" ;;
+    watchdog)       watchdog_tick ;;
+    mount_ui)       ui_mount ;;
+
+    import)         config_import_from_stdin ;;
+
+    update_geo|check_update|update)
         _not_implemented "${cmd}"
         ;;
 
