@@ -3,7 +3,7 @@
 #
 # Caps:
 #   amneziawg-go:            5 MiB
-#   amneziawg-tools:         80 KiB
+#   amneziawg-tools:        150 KiB (static-linked musl adds ~90KB)
 #   amneziawg-merlin-addon:  200 KiB
 
 set -eu
@@ -26,7 +26,7 @@ check_one() {
 }
 
 check_one amneziawg-go           5120
-check_one amneziawg-tools         80
+check_one amneziawg-tools        150
 check_one amneziawg-merlin-addon 200
 
 exit ${fail}
