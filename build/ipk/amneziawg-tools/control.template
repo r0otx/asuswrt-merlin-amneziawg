@@ -1,0 +1,14 @@
+Package: amneziawg-tools
+Version: @VERSION@
+Source: https://github.com/amnezia-vpn/amneziawg-tools
+License: GPL-2.0
+Section: net
+Priority: optional
+Maintainer: r00t <r00tx@mail.ru>
+Architecture: @ARCH@
+Installed-Size: @INSTALLED_SIZE@
+Depends: amneziawg-go (>= @VERSION@), iproute2, libc
+Description: AmneziaWG configuration CLI tools (awg, awg-quick).
+ Fork of wireguard-tools with support for Amnezia obfuscation parameters
+ (Jc/Jmin/Jmax, S1-S4, H1-H4, I1-I5). Used to configure the amneziawg-go
+ daemon.
