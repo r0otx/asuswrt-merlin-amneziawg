@@ -1,0 +1,69 @@
+name: build
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    strategy:
+      fail-fast: false
+      matrix:
+        target:
+          - { name: aarch64, dockerfile: build/docker/Dockerfile.aarch64, platform: linux/arm64,  arch_pkg: aarch64-3.10 }
+          - { name: armv7,   dockerfile: build/docker/Dockerfile.armv7,   platform: linux/arm/v7, arch_pkg: armv7-3.2 }
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
+      - name: Set up Buildx
+        uses: docker/setup-buildx-action@v3
+      - name: Render version into derived files
+        run: ./build/version.sh
+
+      - name: Build (first pass)
+        run: |
+          mkdir -p dist1
+          docker build \
+            --platform ${{ matrix.target.platform }} \
+            -f ${{ matrix.target.dockerfile }} \
+            --build-arg SOURCE_DATE_EPOCH=$(git log -1 --format=%ct) \
+            --output type=local,dest=dist1 \
+            --target output \
+            .
+      - name: Build (second pass — reproducibility)
+        run: |
+          mkdir -p dist2
+          docker build \
+            --platform ${{ matrix.target.platform }} \
+            -f ${{ matrix.target.dockerfile }} \
+            --build-arg SOURCE_DATE_EPOCH=$(git log -1 --format=%ct) \
+            --no-cache \
+            --output type=local,dest=dist2 \
+            --target output \
+            .
+      - name: Reproducibility check
+        run: |
+          fail=0
+          for f in $(cd dist1/out && find . -name '*.ipk'); do
+            if ! cmp -s "dist1/out/${f}" "dist2/out/${f}"; then
+              echo "::error::Reproducibility failure: ${f} differs between builds"
+              sha256sum "dist1/out/${f}" "dist2/out/${f}"
+              fail=1
+            fi
+          done
+          exit ${fail}
+      - name: Size budget
+        run: ./build/ci/check_size.sh dist1/out
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: ipk-${{ matrix.target.name }}
+          path: dist1/out/*.ipk
+          retention-days: 7
