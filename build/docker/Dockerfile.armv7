@@ -1,0 +1,76 @@
+# build/docker/Dockerfile.armv7 — cross-builds for ARMv7sf Entware (GOARM=5, soft-float).
+# Output: /out/*.ipk
+
+# syntax=docker/dockerfile:1.6
+
+ARG GO_VERSION=1.24.4
+ARG ALPINE_TAG=3.19
+
+# --- Stage 1: Go builder -----------------------------------------------------
+FROM --platform=$BUILDPLATFORM golang:${GO_VERSION}-alpine AS go-builder
+ARG SOURCE_DATE_EPOCH
+ENV SOURCE_DATE_EPOCH=${SOURCE_DATE_EPOCH} \
+    CGO_ENABLED=0 \
+    GOOS=linux \
+    GOARCH=arm \
+    GOARM=5 \
+    GOFLAGS=-mod=vendor
+
+WORKDIR /src
+COPY go.mod go.sum ./
+COPY main.go version.go format_test.go ./
+COPY device ./device
+COPY conn ./conn
+COPY tun ./tun
+COPY ipc ./ipc
+COPY outline ./outline
+COPY ratelimiter ./ratelimiter
+COPY replay ./replay
+COPY rwcancel ./rwcancel
+COPY tai64n ./tai64n
+COPY tests ./tests
+RUN go mod download && \
+    go build -trimpath -buildvcs=false \
+             -ldflags "-s -w -buildid=" \
+             -o /out/amneziawg-go .
+
+# --- Stage 2: C tools builder ------------------------------------------------
+FROM --platform=$BUILDPLATFORM alpine:${ALPINE_TAG} AS c-builder
+ARG SOURCE_DATE_EPOCH
+ENV SOURCE_DATE_EPOCH=${SOURCE_DATE_EPOCH}
+RUN apk add --no-cache \
+      bash make gcc musl-dev \
+      gcc-arm-none-eabi binutils-arm-none-eabi
+WORKDIR /src
+COPY tools/ ./tools/
+COPY build/versions.env ./build/
+RUN ./tools/fetch.sh
+RUN $(MAKE) -C tools \
+       ARCH=armv7 \
+       CC="arm-none-eabi-gcc -march=armv5te -mfloat-abi=soft" \
+       LD=arm-none-eabi-ld \
+       STRIP=arm-none-eabi-strip \
+       CFLAGS="-static -O2 -march=armv5te -mfloat-abi=soft" \
+       LDFLAGS="-static" \
+       OUT_DIR=/out
+
+# --- Stage 3: IPK builder ----------------------------------------------------
+FROM alpine:${ALPINE_TAG} AS ipk-builder
+RUN apk add --no-cache bash tar gzip coreutils findutils sha256sum git
+WORKDIR /work
+COPY --from=go-builder /out/amneziawg-go /in/bin/amneziawg-go
+COPY --from=c-builder  /out/awg          /in/bin/awg
+COPY --from=c-builder  /out/awg-quick    /in/bin/awg-quick
+COPY VERSION build/ build/
+COPY addon/ addon/
+COPY tools/VERSION tools/VERSION
+ARG SOURCE_DATE_EPOCH
+ENV SOURCE_DATE_EPOCH=${SOURCE_DATE_EPOCH} \
+    TARGET_ARCH=armv7-3.2 \
+    OUT_DIR=/out
+COPY build/docker/build-in-container.sh /usr/local/bin/build-in-container.sh
+RUN chmod +x /usr/local/bin/build-in-container.sh
+CMD ["/usr/local/bin/build-in-container.sh"]
+
+FROM scratch AS output
+COPY --from=ipk-builder /out/ /out/
