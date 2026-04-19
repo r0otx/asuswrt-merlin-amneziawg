@@ -3,7 +3,7 @@
 # Real logic lives in addon/lib/*.sh; this script is a thin entry point.
 
 AWG_VERSION="0.0.0-dev"
-AWG_ADDON_DIR="/jffs/addons/amneziawg"
+: "${AWG_ADDON_DIR:=/jffs/addons/amneziawg}"
 
 # Source libs. Order matters: log.sh must be first (state/hooks/ui depend on it).
 . "${AWG_ADDON_DIR}/lib/log.sh"

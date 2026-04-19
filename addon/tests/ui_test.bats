@@ -3,7 +3,8 @@
 setup() {
     TMPDIR_TEST="$(mktemp -d)"
     export AMNEZIAWG_LOG_FILE="${TMPDIR_TEST}/log.out"
-    export AMNEZIAWG_ADDON_DIR="${BATS_TEST_DIRNAME}/.."
+    export AMNEZIAWG_ADDON_DIR="${TMPDIR_TEST}/addon_mock"
+    mkdir -p "${AMNEZIAWG_ADDON_DIR}/webui"
 
     # Mock /www/user/ and /www/require/modules/menuTree.js
     export AMNEZIAWG_WWW_USER="${TMPDIR_TEST}/www_user"
@@ -65,8 +66,7 @@ EOF
     . "${BATS_TEST_DIRNAME}/../lib/log.sh"
     . "${BATS_TEST_DIRNAME}/../lib/ui.sh"
 
-    # Create a fake webui .asp
-    mkdir -p "${AMNEZIAWG_ADDON_DIR}/webui"
+    # Create a fake webui .asp inside the isolated mock dir (not the repo!)
     echo '<html><!-- v2 --></html>' > "${AMNEZIAWG_ADDON_DIR}/webui/amneziawg_page.asp"
 }
 
