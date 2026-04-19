@@ -13,8 +13,7 @@ ENV SOURCE_DATE_EPOCH=${SOURCE_DATE_EPOCH} \
     CGO_ENABLED=0 \
     GOOS=linux \
     GOARCH=arm \
-    GOARM=5 \
-    GOFLAGS=-mod=vendor
+    GOARM=5
 
 WORKDIR /src
 COPY go.mod go.sum ./
