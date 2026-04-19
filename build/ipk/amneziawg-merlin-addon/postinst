@@ -1,0 +1,26 @@
+#!/bin/sh
+set -eu
+
+# Verify Merlin addon support
+if ! nvram get rc_support 2>/dev/null | grep -q am_addons; then
+    printf 'ERROR: Asuswrt-Merlin addon support (am_addons) not detected.\n' >&2
+    printf '       This package requires Merlin 384.15 or newer.\n' >&2
+    exit 1
+fi
+
+ADDON_DIR=/jffs/addons/amneziawg
+
+# Load libs and run install_run (registers hooks, mounts webui, stubbed migration)
+. "${ADDON_DIR}/lib/log.sh"
+. "${ADDON_DIR}/lib/state.sh"
+. "${ADDON_DIR}/lib/hooks.sh"
+. "${ADDON_DIR}/lib/ui.sh"
+. "${ADDON_DIR}/lib/install.sh"
+. "${ADDON_DIR}/lib/firewall.sh"
+. "${ADDON_DIR}/lib/pbr.sh"
+. "${ADDON_DIR}/lib/geo.sh"
+
+mkdir -p /tmp/amneziawg
+install_run
+
+exit 0

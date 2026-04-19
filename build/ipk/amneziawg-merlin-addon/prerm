@@ -1,0 +1,22 @@
+#!/bin/sh
+set -eu
+
+ADDON_DIR=/jffs/addons/amneziawg
+[ -d "${ADDON_DIR}" ] || exit 0
+
+. "${ADDON_DIR}/lib/log.sh"
+. "${ADDON_DIR}/lib/state.sh"
+. "${ADDON_DIR}/lib/hooks.sh"
+. "${ADDON_DIR}/lib/ui.sh"
+. "${ADDON_DIR}/lib/install.sh"
+. "${ADDON_DIR}/lib/firewall.sh"
+. "${ADDON_DIR}/lib/pbr.sh"
+. "${ADDON_DIR}/lib/geo.sh"
+
+# Stop tunnel if running (Module 2 will implement the real stop; here it's a no-op)
+if pidof amneziawg-go >/dev/null 2>&1; then
+    pkill -TERM -x amneziawg-go 2>/dev/null || true
+fi
+
+uninstall_run
+exit 0

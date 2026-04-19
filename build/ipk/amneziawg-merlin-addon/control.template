@@ -1,0 +1,16 @@
+Package: amneziawg-merlin-addon
+Version: @VERSION@
+Source: https://github.com/r0otx/asuswrt-merlin-amneziawg
+License: MIT
+Section: net
+Priority: optional
+Maintainer: r00t <r00tx@mail.ru>
+Architecture: all
+Installed-Size: @INSTALLED_SIZE@
+Depends: amneziawg-tools (>= @VERSION@), iptables, ipset, iproute2, conntrack-tools, dnsmasq, jq, curl
+Description: Asuswrt-Merlin WebUI integration for AmneziaWG.
+ Installs amneziawg management scripts under /jffs/addons/amneziawg,
+ mounts a page under VPN -> AmneziaWG in the Merlin WebUI, and wires up
+ service-event / firewall-start / wan-event / services-start hooks.
+ Requires amneziawg-tools and Asuswrt-Merlin with addon support (am_addons
+ in rc_support).

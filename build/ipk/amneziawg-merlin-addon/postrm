@@ -1,0 +1,6 @@
+#!/bin/sh
+# postrm runs after package files are removed.
+# We preserve /opt/etc/amneziawg/awg0.conf and awg_* keys in custom_settings.txt
+# (that's user state). Only tmp artifacts are wiped here.
+rm -rf /tmp/amneziawg
+exit 0
