@@ -34,22 +34,20 @@ RUN go mod download && \
              -ldflags "-s -w -buildid=" \
              -o /out/amneziawg-go .
 
-# --- Stage 2: C tools builder ------------------------------------------------
-FROM --platform=$BUILDPLATFORM alpine:${ALPINE_TAG} AS c-builder
+# --- Stage 2: C tools builder (native build in aarch64 Alpine via QEMU) ------
+FROM --platform=linux/arm64 alpine:${ALPINE_TAG} AS c-builder
 ARG SOURCE_DATE_EPOCH
 ENV SOURCE_DATE_EPOCH=${SOURCE_DATE_EPOCH}
-RUN apk add --no-cache \
-      bash make gcc musl-dev \
-      gcc-aarch64-none-elf binutils-aarch64-none-elf
+RUN apk add --no-cache bash make gcc musl-dev
 WORKDIR /src
 COPY tools/ ./tools/
 COPY build/versions.env ./build/
 RUN ./tools/fetch.sh
 RUN make -C tools \
        ARCH=aarch64 \
-       CC=aarch64-none-elf-gcc \
-       LD=aarch64-none-elf-ld \
-       STRIP=aarch64-none-elf-strip \
+       CC=gcc \
+       LD=ld \
+       STRIP=strip \
        CFLAGS="-static -O2" \
        LDFLAGS="-static" \
        OUT_DIR=/out
