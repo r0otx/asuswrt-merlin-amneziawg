@@ -285,3 +285,81 @@ _set_minimal_valid_config() {
     ! config_validate
     grep -q "mtu" "${AMNEZIAWG_LOG_FILE}"
 }
+
+# --- config_emit ---
+
+_set_full_config_from_amnezia2() {
+    state_set "awg_enabled"         "1"
+    state_set "awg_privatekey"      "aGFoYWhhaGFoYWhhaGFoYWhhaGFoYWhhaGFoYWhhaGE="
+    state_set "awg_address"         "10.8.0.2/24"
+    state_set "awg_dns"             "1.1.1.1"
+    state_set "awg_mtu"             "1280"
+    state_set "awg_jc"              "4"
+    state_set "awg_jmin"            "40"
+    state_set "awg_jmax"            "70"
+    state_set "awg_s1"              "0"
+    state_set "awg_s2"              "0"
+    state_set "awg_h1"              "2072158144-2145681082"
+    state_set "awg_h2"              "1234"
+    state_set "awg_h3"              "5678"
+    state_set "awg_h4"              "9012"
+    state_set "awg_i1"              "<b 0xabcd><r 8><t>"
+    state_set "awg_i2"              "<rd 6>"
+    state_set "awg_i3"              "<rc 10>"
+    state_set "awg_peer_publickey"    "Y3FjcWNxY3FjcWNxY3FjcWNxY3FjcWNxY3FjcWNxY3E="
+    state_set "awg_peer_presharedkey" "cHNrcHNrcHNrcHNrcHNrcHNrcHNrcHNrcHNrcHM="
+    state_set "awg_peer_endpoint"     "vpn.example.com:51820"
+    state_set "awg_peer_allowed_ips"  "0.0.0.0/0,::/0"
+    state_set "awg_peer_keepalive"    "25"
+}
+
+@test "config_emit writes to target path" {
+    _set_full_config_from_amnezia2
+    config_load
+    config_emit "${TMPDIR_TEST}/awg0.conf"
+    [ -f "${TMPDIR_TEST}/awg0.conf" ]
+}
+
+@test "config_emit matches golden fixture" {
+    _set_full_config_from_amnezia2
+    config_load
+    config_emit "${TMPDIR_TEST}/awg0.conf"
+    diff -u "${BATS_TEST_DIRNAME}/fixtures/expected-emit-full.conf" \
+            "${TMPDIR_TEST}/awg0.conf"
+}
+
+@test "config_emit is deterministic (two runs = byte-identical)" {
+    _set_full_config_from_amnezia2
+    config_load
+    config_emit "${TMPDIR_TEST}/one.conf"
+    config_emit "${TMPDIR_TEST}/two.conf"
+    cmp -s "${TMPDIR_TEST}/one.conf" "${TMPDIR_TEST}/two.conf"
+}
+
+@test "config_emit uses tmp+mv (no leftover .tmp file)" {
+    _set_full_config_from_amnezia2
+    config_load
+    config_emit "${TMPDIR_TEST}/awg0.conf"
+    ! ls "${TMPDIR_TEST}/awg0.conf.tmp."* 2>/dev/null
+}
+
+@test "config_emit omits empty optional fields" {
+    state_set "awg_enabled"           "1"
+    state_set "awg_privatekey"        "aGFoYWhhaGFoYWhhaGFoYWhhaGFoYWhhaGFoYWhhaGE="
+    state_set "awg_address"           "10.8.0.2/24"
+    state_set "awg_jc"                "4"
+    state_set "awg_jmin"              "40"
+    state_set "awg_jmax"              "70"
+    state_set "awg_h1"                "1"
+    state_set "awg_h2"                "2"
+    state_set "awg_h3"                "3"
+    state_set "awg_h4"                "4"
+    state_set "awg_peer_publickey"    "Y3FjcWNxY3FjcWNxY3FjcWNxY3FjcWNxY3FjcWNxY3E="
+    state_set "awg_peer_endpoint"     "example.com:51820"
+    state_set "awg_peer_allowed_ips"  "0.0.0.0/0"
+    config_load
+    config_emit "${TMPDIR_TEST}/awg0.conf"
+    ! grep -q '^DNS '            "${TMPDIR_TEST}/awg0.conf"
+    ! grep -q '^I1 '             "${TMPDIR_TEST}/awg0.conf"
+    ! grep -q '^PresharedKey '   "${TMPDIR_TEST}/awg0.conf"
+}
