@@ -57,9 +57,10 @@ WORKDIR /work
 COPY --from=go-builder /out/amneziawg-go /in/bin/amneziawg-go
 COPY --from=c-builder  /out/awg          /in/bin/awg
 COPY --from=c-builder  /out/awg-quick    /in/bin/awg-quick
-COPY VERSION build/ build/
-COPY addon/ addon/
-COPY tools/VERSION tools/VERSION
+COPY VERSION LICENSE ./
+COPY build/ ./build/
+COPY addon/ ./addon/
+COPY tools/VERSION ./tools/VERSION
 ARG SOURCE_DATE_EPOCH
 ENV SOURCE_DATE_EPOCH=${SOURCE_DATE_EPOCH} \
     TARGET_ARCH=armv7-3.2 \
