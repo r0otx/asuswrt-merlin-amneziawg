@@ -47,9 +47,7 @@ RUN ./tools/fetch.sh
 RUN make -C tools \
        ARCH=aarch64 \
        CC=gcc \
-       LD=ld \
        STRIP=strip \
-       CFLAGS="-static -O2 -I uapi/linux" \
        LDFLAGS="-static" \
        OUT_DIR=/out
 
