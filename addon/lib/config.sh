@@ -99,3 +99,74 @@ _config_validate_int_range() {
     [ "${_val}" -ge "${_min}" ] && [ "${_val}" -le "${_max}" ] || return 1
     return 0
 }
+
+_config_validate_h_value() {
+    # AmneziaWG 2.0: single int or range "N-M" with M>=N.
+    _val="$1"
+    [ -n "${_val}" ] || return 1
+    case "${_val}" in
+        *-*)
+            _lo="${_val%-*}"
+            _hi="${_val#*-}"
+            printf '%s' "${_lo}" | grep -Eq '^[0-9]+$' || return 1
+            printf '%s' "${_hi}" | grep -Eq '^[0-9]+$' || return 1
+            [ "${_lo}" -le "${_hi}" ] || return 1
+            ;;
+        *)
+            printf '%s' "${_val}" | grep -Eq '^[0-9]+$' || return 1
+            ;;
+    esac
+    return 0
+}
+
+_config_validate_i_sequence() {
+    # AmneziaWG 2.0 tagged signature packet value.
+    # Empty string OK — means "field absent".
+    _val="$1"
+    [ -z "${_val}" ] && return 0
+    # Consume tags from left. Each iteration strips one valid tag.
+    _rest="${_val}"
+    while [ -n "${_rest}" ]; do
+        case "${_rest}" in
+            "<t>"*)
+                _rest="${_rest#<t>}"
+                ;;
+            "<b 0x"*">"*)
+                # <b 0x[even-length-hex]>
+                _tag="${_rest%%>*}>"
+                _hex="${_tag#<b 0x}"
+                _hex="${_hex%>}"
+                # Even-length hex
+                _hexlen=${#_hex}
+                [ "$((_hexlen % 2))" -eq 0 ] || return 1
+                printf '%s' "${_hex}" | grep -Eq '^[0-9a-fA-F]+$' || return 1
+                _rest="${_rest#*>}"
+                ;;
+            "<r "*">"*)
+                _tag="${_rest%%>*}>"
+                _size="${_tag#<r }"
+                _size="${_size%>}"
+                printf '%s' "${_size}" | grep -Eq '^[0-9]+$' || return 1
+                _rest="${_rest#*>}"
+                ;;
+            "<rd "*">"*)
+                _tag="${_rest%%>*}>"
+                _size="${_tag#<rd }"
+                _size="${_size%>}"
+                printf '%s' "${_size}" | grep -Eq '^[0-9]+$' || return 1
+                _rest="${_rest#*>}"
+                ;;
+            "<rc "*">"*)
+                _tag="${_rest%%>*}>"
+                _size="${_tag#<rc }"
+                _size="${_size%>}"
+                printf '%s' "${_size}" | grep -Eq '^[0-9]+$' || return 1
+                _rest="${_rest#*>}"
+                ;;
+            *)
+                return 1
+                ;;
+        esac
+    done
+    return 0
+}

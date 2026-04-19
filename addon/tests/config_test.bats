@@ -115,3 +115,75 @@ teardown() {
 @test "validate_int_range rejects non-numeric" {
     ! _config_validate_int_range "abc" 100 1000
 }
+
+# --- _config_validate_h_value (AmneziaWG 2.0 range syntax) ---
+
+@test "validate_h_value accepts single int" {
+    _config_validate_h_value "12345"
+}
+
+@test "validate_h_value accepts range" {
+    _config_validate_h_value "2072158144-2145681082"
+}
+
+@test "validate_h_value rejects range with min>max" {
+    ! _config_validate_h_value "100-50"
+}
+
+@test "validate_h_value rejects non-numeric" {
+    ! _config_validate_h_value "abc"
+}
+
+@test "validate_h_value rejects empty" {
+    ! _config_validate_h_value ""
+}
+
+@test "validate_h_value accepts range with equal bounds" {
+    _config_validate_h_value "100-100"
+}
+
+# --- _config_validate_i_sequence (I1-I5 tagged syntax) ---
+
+@test "validate_i_sequence accepts empty (field absent)" {
+    _config_validate_i_sequence ""
+}
+
+@test "validate_i_sequence accepts static bytes tag" {
+    _config_validate_i_sequence "<b 0xabcd>"
+}
+
+@test "validate_i_sequence accepts random bytes tag" {
+    _config_validate_i_sequence "<r 8>"
+}
+
+@test "validate_i_sequence accepts random digits tag" {
+    _config_validate_i_sequence "<rd 6>"
+}
+
+@test "validate_i_sequence accepts random chars tag" {
+    _config_validate_i_sequence "<rc 10>"
+}
+
+@test "validate_i_sequence accepts timestamp tag" {
+    _config_validate_i_sequence "<t>"
+}
+
+@test "validate_i_sequence accepts compound sequence" {
+    _config_validate_i_sequence "<b 0xabcd><r 8><t>"
+}
+
+@test "validate_i_sequence rejects odd-length hex in b tag" {
+    ! _config_validate_i_sequence "<b 0xabc>"
+}
+
+@test "validate_i_sequence rejects unknown tag" {
+    ! _config_validate_i_sequence "<x 5>"
+}
+
+@test "validate_i_sequence rejects stray text between tags" {
+    ! _config_validate_i_sequence "<t>garbage<r 8>"
+}
+
+@test "validate_i_sequence rejects unclosed tag" {
+    ! _config_validate_i_sequence "<t"
+}
