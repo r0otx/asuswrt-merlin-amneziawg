@@ -44,7 +44,7 @@ WORKDIR /src
 COPY tools/ ./tools/
 COPY build/versions.env ./build/
 RUN ./tools/fetch.sh
-RUN $(MAKE) -C tools \
+RUN make -C tools \
        ARCH=armv7 \
        CC="arm-none-eabi-gcc -march=armv5te -mfloat-abi=soft" \
        LD=arm-none-eabi-ld \

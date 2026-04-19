@@ -45,7 +45,7 @@ WORKDIR /src
 COPY tools/ ./tools/
 COPY build/versions.env ./build/
 RUN ./tools/fetch.sh
-RUN $(MAKE) -C tools \
+RUN make -C tools \
        ARCH=aarch64 \
        CC=aarch64-none-elf-gcc \
        LD=aarch64-none-elf-ld \
