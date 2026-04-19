@@ -38,7 +38,8 @@ RUN go mod download && \
 FROM --platform=linux/arm64 alpine:${ALPINE_TAG} AS c-builder
 ARG SOURCE_DATE_EPOCH
 ENV SOURCE_DATE_EPOCH=${SOURCE_DATE_EPOCH}
-RUN apk add --no-cache bash make gcc musl-dev linux-headers
+RUN apk add --no-cache bash make gcc musl-dev linux-headers && \
+    rm -f /usr/include/linux/wireguard.h
 WORKDIR /src
 COPY tools/ ./tools/
 COPY build/versions.env ./build/
