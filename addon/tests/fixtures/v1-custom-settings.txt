@@ -1,6 +1,6 @@
 amneziawg_enabled 1
-amneziawg_privatekey aGFhaGFoYWhhaGFoYWhhaGFoYWhhaGFoYWhhaGFoYWhhaGE=
-amneziawg_publickey Y3FjcWNxY3FjcWNxY3FjcWNxY3FjcWNxY3FjcWNxY3FjcWM=
+amneziawg_privatekey aGFoYWhhaGFoYWhhaGFoYWhhaGFoYWhhaGFoYWhhaGE=
+amneziawg_publickey Y3FjcWNxY3FjcWNxY3FjcWNxY3FjcWNxY3FjcWNxY3E=
 amneziawg_address 10.8.0.2/24
 amneziawg_dns 1.1.1.1
 amneziawg_endpoint example.com:51820
