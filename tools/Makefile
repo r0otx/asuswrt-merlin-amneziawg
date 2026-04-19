@@ -14,9 +14,7 @@ all:
 		echo "tools/src missing — run tools/fetch.sh first." >&2; \
 		exit 1; \
 	fi
-	$(MAKE) -C $(SRC_DIR)/src \
-	    CC="$(CC)" STRIP="$(STRIP)" \
-	    CFLAGS="$(CFLAGS)" LDFLAGS="$(LDFLAGS)"
+	$(MAKE) -C $(SRC_DIR)/src $(if $(CC),CC="$(CC)") $(if $(STRIP),STRIP="$(STRIP)") $(if $(LDFLAGS),LDFLAGS="$(LDFLAGS)")
 	mkdir -p $(OUT_DIR)
 	cp $(SRC_DIR)/src/wg $(OUT_DIR)/awg
 	cp $(SRC_DIR)/src/wg-quick/linux.bash $(OUT_DIR)/awg-quick
