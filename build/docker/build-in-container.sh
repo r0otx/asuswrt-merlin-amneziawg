@@ -12,9 +12,14 @@ mkdir -p "${OUT_DIR}"
 . "${REPO_ROOT}/build/versions.env"
 VERSION="$(cat "${REPO_ROOT}/VERSION" | tr -d '[:space:]')"
 
-# Build each .ipk
+# Build each .ipk. The merlin-addon is arch-independent (all shell/asp/js),
+# the go daemon and tools binaries are per-arch.
 for pkg in amneziawg-go amneziawg-tools amneziawg-merlin-addon; do
-    "${REPO_ROOT}/build/ci/make_ipk.sh" "${pkg}" "${TARGET_ARCH}" \
+    case "${pkg}" in
+        amneziawg-merlin-addon) _arch="all" ;;
+        *) _arch="${TARGET_ARCH}" ;;
+    esac
+    "${REPO_ROOT}/build/ci/make_ipk.sh" "${pkg}" "${_arch}" \
         "${VERSION}-${IPK_REVISION}" "${OUT_DIR}"
 done
 
