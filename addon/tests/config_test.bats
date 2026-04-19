@@ -187,3 +187,101 @@ teardown() {
 @test "validate_i_sequence rejects unclosed tag" {
     ! _config_validate_i_sequence "<t"
 }
+
+# --- config_load ---
+
+@test "config_load populates _cfg vars from custom_settings" {
+    state_set "awg_enabled" "1"
+    state_set "awg_privatekey" "aGFoYWhhaGFoYWhhaGFoYWhhaGFoYWhhaGFoYWhhaGE="
+    state_set "awg_address" "10.8.0.2/24"
+    state_set "awg_peer_endpoint" "example.com:51820"
+    config_load
+    [ "${_cfg_enabled}" = "1" ]
+    [ "${_cfg_address}" = "10.8.0.2/24" ]
+    [ "${_cfg_peer_endpoint}" = "example.com:51820" ]
+}
+
+@test "config_load sets empty for missing keys" {
+    config_load
+    [ -z "${_cfg_privatekey}" ]
+    [ -z "${_cfg_peer_endpoint}" ]
+}
+
+# --- config_validate (integration) ---
+
+_set_minimal_valid_config() {
+    state_set "awg_enabled" "1"
+    state_set "awg_privatekey"     "aGFoYWhhaGFoYWhhaGFoYWhhaGFoYWhhaGFoYWhhaGE="
+    state_set "awg_address"        "10.8.0.2/24"
+    state_set "awg_jc"             "4"
+    state_set "awg_jmin"           "40"
+    state_set "awg_jmax"           "70"
+    state_set "awg_h1"             "1"
+    state_set "awg_h2"             "2"
+    state_set "awg_h3"             "3"
+    state_set "awg_h4"             "4"
+    state_set "awg_peer_publickey" "Y3FjcWNxY3FjcWNxY3FjcWNxY3FjcWNxY3FjcWNxY3E="
+    state_set "awg_peer_endpoint"  "example.com:51820"
+    state_set "awg_peer_allowed_ips" "0.0.0.0/0"
+}
+
+@test "config_validate accepts minimal valid config" {
+    _set_minimal_valid_config
+    config_load
+    config_validate
+}
+
+@test "config_validate rejects missing privatekey" {
+    _set_minimal_valid_config
+    state_delete "awg_privatekey"
+    config_load
+    ! config_validate
+    grep -q "privatekey" "${AMNEZIAWG_LOG_FILE}"
+}
+
+@test "config_validate rejects bad H1" {
+    _set_minimal_valid_config
+    state_set "awg_h1" "abc"
+    config_load
+    ! config_validate
+    grep -q "h1" "${AMNEZIAWG_LOG_FILE}"
+}
+
+@test "config_validate rejects jmax < jmin" {
+    _set_minimal_valid_config
+    state_set "awg_jmin" "100"
+    state_set "awg_jmax" "50"
+    config_load
+    ! config_validate
+    grep -q "jmax" "${AMNEZIAWG_LOG_FILE}"
+}
+
+@test "config_validate accepts H1 range" {
+    _set_minimal_valid_config
+    state_set "awg_h1" "2072158144-2145681082"
+    config_load
+    config_validate
+}
+
+@test "config_validate accepts optional I1" {
+    _set_minimal_valid_config
+    state_set "awg_i1" "<b 0xabcd><r 8><t>"
+    config_load
+    config_validate
+}
+
+@test "config_validate rejects bad I1" {
+    _set_minimal_valid_config
+    state_set "awg_i1" "garbage"
+    config_load
+    ! config_validate
+    grep -q "i1" "${AMNEZIAWG_LOG_FILE}"
+}
+
+@test "config_validate rejects bad MTU" {
+    _set_minimal_valid_config
+    state_set "awg_mtu" "100"
+    config_load
+    ! config_validate
+    grep -q "mtu" "${AMNEZIAWG_LOG_FILE}"
+}
