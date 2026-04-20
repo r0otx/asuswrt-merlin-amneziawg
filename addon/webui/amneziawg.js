@@ -501,4 +501,193 @@
         };
     })();
 
+
+    // ---------- AWG.pbr ----------
+
+    AWG.pbr = (function () {
+        var _devices = [];
+        var _leases = [];
+
+        var POLICIES = ['direct', 'vpn_all', 'vpn_geo'];
+
+        function setDevices(devs) {
+            _devices = Array.isArray(devs) ? devs.slice() : [];
+            _render();
+        }
+
+        function snapshot() {
+            // Return deep copy
+            var out = [];
+            for (var i = 0; i < _devices.length; i++) {
+                out.push({
+                    ip:     _devices[i].ip || '',
+                    mac:    _devices[i].mac || '',
+                    name:   _devices[i].name || '',
+                    policy: _devices[i].policy || 'direct'
+                });
+            }
+            return out;
+        }
+
+        function add(dev) {
+            _devices.push({
+                ip:     dev.ip || '',
+                mac:    dev.mac || '',
+                name:   dev.name || '',
+                policy: dev.policy || 'direct'
+            });
+            _render();
+            AWG.config.markDirty();
+        }
+
+        function remove(idx) {
+            if (idx < 0 || idx >= _devices.length) return;
+            _devices.splice(idx, 1);
+            _render();
+            AWG.config.markDirty();
+        }
+
+        function updateAt(idx, field, value) {
+            if (idx < 0 || idx >= _devices.length) return;
+            _devices[idx][field] = value;
+            AWG.config.markDirty();
+            // Re-apply class on row (policy class change only)
+            if (field === 'policy') {
+                var row = document.querySelector('#awg-devices tr[data-idx="' + idx + '"]');
+                if (row) {
+                    row.className = 'awg-device-row awg-policy-' + value;
+                }
+            }
+        }
+
+        function updateLeasePicker(leases) {
+            _leases = Array.isArray(leases) ? leases : [];
+            var picker = AWG.util.$('awg-lease-picker');
+            if (!picker) return;
+            // Clear options except the first placeholder
+            while (picker.options.length > 1) picker.remove(1);
+            for (var i = 0; i < _leases.length; i++) {
+                var opt = document.createElement('option');
+                opt.value = _leases[i].mac + '|' + _leases[i].ip + '|' + (_leases[i].name || '');
+                opt.textContent = (_leases[i].name || '(unnamed)') + ' — ' +
+                                  _leases[i].ip + ' [' + _leases[i].mac + ']';
+                picker.appendChild(opt);
+            }
+        }
+
+        function addFromLeasePicker() {
+            var picker = AWG.util.$('awg-lease-picker');
+            if (!picker || !picker.value) return;
+            var parts = picker.value.split('|');
+            add({
+                mac: parts[0] || '',
+                ip: parts[1] || '',
+                name: parts[2] || '',
+                policy: 'direct'
+            });
+            picker.selectedIndex = 0;
+        }
+
+        function addManual() {
+            var ip = (AWG.util.$('awg-manual-ip') || {}).value || '';
+            var mac = (AWG.util.$('awg-manual-mac') || {}).value || '';
+            var name = (AWG.util.$('awg-manual-name') || {}).value || '';
+            if (!ip) {
+                alert('IP address required to add device');
+                return;
+            }
+            add({ ip: ip, mac: mac, name: name, policy: 'direct' });
+            AWG.util.$('awg-manual-ip').value = '';
+            AWG.util.$('awg-manual-mac').value = '';
+            AWG.util.$('awg-manual-name').value = '';
+        }
+
+        function _render() {
+            var tbody = document.querySelector('#awg-devices tbody');
+            if (!tbody) return;
+            // Clear
+            while (tbody.firstChild) tbody.removeChild(tbody.firstChild);
+            // Rebuild
+            for (var i = 0; i < _devices.length; i++) {
+                tbody.appendChild(_renderRow(i, _devices[i]));
+            }
+        }
+
+        function _renderRow(idx, dev) {
+            var tr = document.createElement('tr');
+            tr.className = 'awg-device-row awg-policy-' + (dev.policy || 'direct');
+            tr.setAttribute('data-idx', String(idx));
+
+            var tdName = document.createElement('td');
+            var inpName = document.createElement('input');
+            inpName.type = 'text';
+            inpName.value = dev.name || '';
+            inpName.className = 'form_input';
+            inpName.addEventListener('input', function () {
+                updateAt(idx, 'name', inpName.value);
+            });
+            tdName.appendChild(inpName);
+
+            var tdIp = document.createElement('td');
+            var inpIp = document.createElement('input');
+            inpIp.type = 'text';
+            inpIp.value = dev.ip || '';
+            inpIp.className = 'form_input';
+            inpIp.addEventListener('input', function () {
+                updateAt(idx, 'ip', inpIp.value);
+            });
+            tdIp.appendChild(inpIp);
+
+            var tdMac = document.createElement('td');
+            var inpMac = document.createElement('input');
+            inpMac.type = 'text';
+            inpMac.value = dev.mac || '';
+            inpMac.className = 'form_input';
+            inpMac.addEventListener('input', function () {
+                updateAt(idx, 'mac', inpMac.value);
+            });
+            tdMac.appendChild(inpMac);
+
+            var tdPolicy = document.createElement('td');
+            var sel = document.createElement('select');
+            sel.className = 'form_input';
+            for (var i = 0; i < POLICIES.length; i++) {
+                var opt = document.createElement('option');
+                opt.value = POLICIES[i];
+                opt.textContent = POLICIES[i];
+                if (POLICIES[i] === (dev.policy || 'direct')) opt.selected = true;
+                sel.appendChild(opt);
+            }
+            sel.addEventListener('change', function () {
+                updateAt(idx, 'policy', sel.value);
+            });
+            tdPolicy.appendChild(sel);
+
+            var tdAction = document.createElement('td');
+            var btnDel = document.createElement('button');
+            btnDel.type = 'button';
+            btnDel.className = 'form_button';
+            btnDel.textContent = 'Remove';
+            btnDel.addEventListener('click', function () { remove(idx); });
+            tdAction.appendChild(btnDel);
+
+            tr.appendChild(tdName);
+            tr.appendChild(tdIp);
+            tr.appendChild(tdMac);
+            tr.appendChild(tdPolicy);
+            tr.appendChild(tdAction);
+            return tr;
+        }
+
+        return {
+            setDevices: setDevices,
+            snapshot: snapshot,
+            add: add,
+            remove: remove,
+            updateLeasePicker: updateLeasePicker,
+            addFromLeasePicker: addFromLeasePicker,
+            addManual: addManual
+        };
+    })();
+
 })(window);
