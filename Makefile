@@ -28,9 +28,10 @@ lint: ## Run lint.yml equivalents locally
 	yamllint .github/workflows/
 
 .PHONY: test
-test: ## Run Go + bats tests
+test: ## Run Go + bats + webui tests
 	go test -race ./...
 	bats addon/tests/
+	bash addon/webui/tests/run.sh
 
 .PHONY: daemon
 daemon: ## Build amneziawg-go binary natively (upstream Makefile)
