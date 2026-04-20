@@ -93,3 +93,36 @@ _add_device() {
     _ip="$(_pbr_resolve_ip aa:bb:cc:dd:ee:01)"
     [ "${_ip}" = "192.168.1.100" ]
 }
+
+@test "pbr_setup adds prio-99 ip rule for vpn_all device" {
+    _add_device 0 192.168.1.100 aa:bb:cc:dd:ee:01 laptop vpn_all
+    pbr_setup
+    grep -q 'rule add from 192.168.1.100 lookup 300 prio 99' "${TMPDIR_TEST}/ip.log"
+}
+
+@test "pbr_setup adds prio-97 ip rule for direct device" {
+    _add_device 0 192.168.1.100 aa:bb:cc:dd:ee:01 laptop direct
+    pbr_setup
+    grep -q 'rule add from 192.168.1.100 lookup main prio 97' "${TMPDIR_TEST}/ip.log"
+}
+
+@test "pbr_setup adds global fwmark prio-98 rule" {
+    _add_device 0 192.168.1.100 aa:bb:cc:dd:ee:01 laptop vpn_all
+    pbr_setup
+    grep -q 'rule add fwmark 0x100/0xFF00 lookup 300 prio 98' "${TMPDIR_TEST}/ip.log"
+}
+
+@test "pbr_setup emits MARK rule for vpn_geo device" {
+    _add_device 0 192.168.1.100 aa:bb:cc:dd:ee:01 laptop vpn_geo
+    pbr_setup
+    iptables -t mangle -S AMNEZIAWG | grep -q -- '-s 192.168.1.100 -m set --match-set awg_geo_dst dst -j MARK --set-mark 0x100/0xFF00'
+}
+
+@test "pbr_teardown removes ip rules and flushes chain" {
+    _add_device 0 192.168.1.100 aa:bb:cc:dd:ee:01 laptop vpn_all
+    pbr_setup
+    pbr_teardown
+    grep -q 'rule del from 192.168.1.100 lookup 300 prio 99' "${TMPDIR_TEST}/ip.log"
+    # AMNEZIAWG chain should be empty of -A rules
+    [ -z "$(iptables -t mangle -S AMNEZIAWG 2>/dev/null | grep '^-A')" ]
+}
