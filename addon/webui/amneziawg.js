@@ -304,4 +304,108 @@
         };
     })();
 
+    // ---------- AWG.config ----------
+
+    AWG.config = (function () {
+        var _snapshot = null;
+        var _dirty = false;
+
+        // Scalar keys that map 1:1 to form inputs.
+        var SCALAR_KEYS = [
+            'awg_enabled',
+            'awg_privatekey', 'awg_address', 'awg_dns', 'awg_mtu',
+            'awg_jc', 'awg_jmin', 'awg_jmax',
+            'awg_s1', 'awg_s2', 'awg_s3', 'awg_s4',
+            'awg_h1', 'awg_h2', 'awg_h3', 'awg_h4',
+            'awg_i1', 'awg_i2', 'awg_i3', 'awg_i4', 'awg_i5',
+            'awg_peer_publickey', 'awg_peer_presharedkey',
+            'awg_peer_endpoint', 'awg_peer_allowed_ips', 'awg_peer_keepalive',
+            'awg_default_policy',
+            'awg_killswitch_strict', 'awg_ipv6_allow_bypass',
+            'awg_doh_blocklist', 'awg_geo_entries',
+            'awg_ui_poll_interval'
+        ];
+
+        function _elemValue(el) {
+            if (!el) return '';
+            if (el.type === 'checkbox') return el.checked ? '1' : '0';
+            return el.value;
+        }
+
+        function _setElemValue(el, value) {
+            if (!el) return;
+            if (el.type === 'checkbox') {
+                el.checked = (value === '1' || value === true || value === 'true');
+            } else {
+                el.value = (value == null ? '' : value);
+            }
+        }
+
+        function readForm() {
+            var out = {};
+            for (var i = 0; i < SCALAR_KEYS.length; i++) {
+                var key = SCALAR_KEYS[i];
+                var el = AWG.util.$(key);
+                out[key] = _elemValue(el);
+            }
+            // Devices: walk AWG.pbr.snapshot().
+            var devs = (AWG.pbr && AWG.pbr.snapshot) ? AWG.pbr.snapshot() : [];
+            out.awg_dev_count = String(devs.length);
+            for (var j = 0; j < devs.length; j++) {
+                out['awg_dev_' + j + '_ip']     = devs[j].ip || '';
+                out['awg_dev_' + j + '_mac']    = devs[j].mac || '';
+                out['awg_dev_' + j + '_name']   = devs[j].name || '';
+                out['awg_dev_' + j + '_policy'] = devs[j].policy || 'direct';
+            }
+            return out;
+        }
+
+        function populateForm(obj) {
+            obj = obj || {};
+            for (var i = 0; i < SCALAR_KEYS.length; i++) {
+                var key = SCALAR_KEYS[i];
+                if (key in obj) {
+                    _setElemValue(AWG.util.$(key), obj[key]);
+                }
+            }
+            // Devices
+            var count = parseInt(obj.awg_dev_count || '0', 10);
+            var devs = [];
+            for (var j = 0; j < count; j++) {
+                devs.push({
+                    ip:     obj['awg_dev_' + j + '_ip']     || '',
+                    mac:    obj['awg_dev_' + j + '_mac']    || '',
+                    name:   obj['awg_dev_' + j + '_name']   || '',
+                    policy: obj['awg_dev_' + j + '_policy'] || 'direct'
+                });
+            }
+            if (AWG.pbr && AWG.pbr.setDevices) AWG.pbr.setDevices(devs);
+        }
+
+        // Take a snapshot of current form state — used as baseline for dirty detection.
+        function snapshot() {
+            _snapshot = JSON.stringify(readForm());
+            _dirty = false;
+        }
+
+        function markDirty() { _dirty = true; }
+        function clearDirty() { _dirty = false; }
+        function isDirty() { return _dirty; }
+
+        // Also expose a flat keys list for AWG.forms.
+        function flatKeys() {
+            return SCALAR_KEYS.slice();
+        }
+
+        return {
+            readForm: readForm,
+            populateForm: populateForm,
+            snapshot: snapshot,
+            markDirty: markDirty,
+            clearDirty: clearDirty,
+            isDirty: isDirty,
+            flatKeys: flatKeys
+        };
+    })();
+
 })(window);
