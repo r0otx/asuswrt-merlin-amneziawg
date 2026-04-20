@@ -25,6 +25,26 @@ status_emit_json() {
     _enabled="false"
     _log_tail=""
 
+    _leases_json="[]"
+    : "${AMNEZIAWG_DNSMASQ_LEASES:=/var/lib/misc/dnsmasq.leases}"
+    if [ -f "${AMNEZIAWG_DNSMASQ_LEASES}" ]; then
+        _leases_json="$(awk '
+            BEGIN { printf "[" }
+            NR==1 { first=1 }
+            NR<=50 {
+                name = ($4 == "*" ? "" : $4)
+                if (!first) printf ","
+                printf "{\"mac\":\"%s\",\"ip\":\"%s\",\"name\":\"%s\"}", $2, $3, name
+                first=0
+            }
+            END { printf "]" }
+        ' "${AMNEZIAWG_DNSMASQ_LEASES}" 2>/dev/null)"
+        [ -z "${_leases_json}" ] && _leases_json="[]"
+    fi
+
+    _killswitch_armed="false"
+    [ -f "${AMNEZIAWG_RUNTIME}/killswitch-armed" ] && _killswitch_armed="true"
+
     [ "$(state_get awg_enabled 2>/dev/null)" = "1" ] && _enabled="true"
 
     if tunnel_is_up; then
@@ -64,6 +84,8 @@ status_emit_json() {
         printf '"handshake_age_seconds":%s,'  "${_handshake_age:-0}"
         printf '"stock_wg_conflict":%s,'      "${_conflict}"
         printf '"daemon_log_tail":"%s"'       "${_log_tail}"
+        printf ',"leases":%s'                 "${_leases_json}"
+        printf ',"killswitch_armed":%s'       "${_killswitch_armed}"
         printf '}\n'
     } > "${_tmp}"
     mv "${_tmp}" "${AMNEZIAWG_RUNTIME}/status.json"

@@ -121,3 +121,23 @@ EOF
     status_emit_json
     grep -q '"stock_wg_conflict":true' "${AMNEZIAWG_RUNTIME}/status.json"
 }
+
+@test "status_emit_json includes leases from dnsmasq.leases" {
+    export AMNEZIAWG_DNSMASQ_LEASES="${TMPDIR_TEST}/dnsmasq.leases"
+    cat > "${AMNEZIAWG_DNSMASQ_LEASES}" <<'EOF'
+1729550000 aa:bb:cc:dd:ee:01 192.168.1.100 laptop *
+1729550100 aa:bb:cc:dd:ee:02 192.168.1.105 phone *
+EOF
+    status_emit_json
+    grep -q '"leases":\[' "${AMNEZIAWG_RUNTIME}/status.json"
+    grep -q '"mac":"aa:bb:cc:dd:ee:01"' "${AMNEZIAWG_RUNTIME}/status.json"
+    grep -q '"ip":"192.168.1.105"' "${AMNEZIAWG_RUNTIME}/status.json"
+}
+
+@test "status_emit_json includes killswitch_armed flag" {
+    status_emit_json
+    grep -q '"killswitch_armed":false' "${AMNEZIAWG_RUNTIME}/status.json"
+    touch "${AMNEZIAWG_RUNTIME}/killswitch-armed"
+    status_emit_json
+    grep -q '"killswitch_armed":true' "${AMNEZIAWG_RUNTIME}/status.json"
+}
