@@ -2,6 +2,7 @@
 
 setup() {
     TMPDIR_TEST="$(mktemp -d)"
+    export TMPDIR_TEST
     export AMNEZIAWG_LOG_FILE="${TMPDIR_TEST}/log.out"
     export AMNEZIAWG_CUSTOM_SETTINGS="${TMPDIR_TEST}/cs.txt"
     export AMNEZIAWG_RUNTIME="${TMPDIR_TEST}/runtime"
@@ -57,7 +58,11 @@ EOF
     chmod +x "${TMPDIR_TEST}/bin/flock"
     cat > "${TMPDIR_TEST}/bin/nvram" <<'EOF'
 #!/bin/sh
-exit 0
+case "$2" in
+    lan_ipaddr)  echo "192.168.1.1" ;;
+    lan_netmask) echo "255.255.255.0" ;;
+    *) echo "" ;;
+esac
 EOF
     chmod +x "${TMPDIR_TEST}/bin/nvram"
 
@@ -77,6 +82,11 @@ EOF
     . "${BATS_TEST_DIRNAME}/../lib/config.sh"
     . "${BATS_TEST_DIRNAME}/../lib/tunnel.sh"
     . "${BATS_TEST_DIRNAME}/../lib/status.sh"
+    . "${BATS_TEST_DIRNAME}/fixtures/mock_iptables.sh"; mock_iptables_install
+    . "${BATS_TEST_DIRNAME}/../lib/iptables_chain.sh"
+    . "${BATS_TEST_DIRNAME}/../lib/dns.sh"
+    . "${BATS_TEST_DIRNAME}/../lib/firewall.sh"
+    . "${BATS_TEST_DIRNAME}/../lib/pbr.sh"
     . "${BATS_TEST_DIRNAME}/../lib/watchdog.sh"
 
     state_set "awg_enabled"           "1"
@@ -144,4 +154,27 @@ teardown() {
     : > "${MOCK_LOG}"
     watchdog_tick
     ! grep -q "^awg-quick" "${MOCK_LOG}"
+}
+
+@test "watchdog_tick arms kill-switch when tunnel goes down" {
+    state_set "awg_killswitch_strict" "1"
+    # Simulate tunnel was up before (no flag), now down
+    rm -f "${TMPDIR_TEST}/link-up"
+    rm -f "${TMPDIR_TEST}/daemon-pid"
+    # Force watchdog to think there's no overlap guard
+    rm -f "${AMNEZIAWG_RUNTIME}/watchdog-state"
+    watchdog_tick
+    [ -f "${AMNEZIAWG_RUNTIME}/killswitch-armed" ]
+}
+
+@test "watchdog_tick disarms kill-switch when tunnel comes back up" {
+    state_set "awg_killswitch_strict" "1"
+    touch "${AMNEZIAWG_RUNTIME}/killswitch-armed"
+    touch "${TMPDIR_TEST}/link-up"
+    touch "${TMPDIR_TEST}/daemon-pid"
+    # Fresh handshake so tunnel is considered healthy
+    export WATCHDOG_FAKE_HANDSHAKE_AGE=30
+    rm -f "${AMNEZIAWG_RUNTIME}/watchdog-state"
+    watchdog_tick
+    [ ! -f "${AMNEZIAWG_RUNTIME}/killswitch-armed" ]
 }

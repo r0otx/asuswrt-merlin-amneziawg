@@ -2,6 +2,7 @@
 
 setup() {
     TMPDIR_TEST="$(mktemp -d)"
+    export TMPDIR_TEST
     export AMNEZIAWG_LOG_FILE="${TMPDIR_TEST}/log.out"
     export AMNEZIAWG_CUSTOM_SETTINGS="${TMPDIR_TEST}/cs.txt"
     export AMNEZIAWG_RUNTIME="${TMPDIR_TEST}/runtime"

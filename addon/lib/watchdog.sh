@@ -71,6 +71,12 @@ watchdog_tick() {
     fi
 
     if tunnel_is_up; then
+        # If we had armed kill-switch before, disarm now
+        if [ -f "${AMNEZIAWG_RUNTIME}/killswitch-armed" ] && \
+           command -v pbr_kill_switch_disarm >/dev/null 2>&1; then
+            pbr_kill_switch_disarm
+        fi
+
         _dump="$(awg show "${AMNEZIAWG_INTERFACE}" dump 2>/dev/null)"
         _handshake_at="$(printf '%s\n' "${_dump}" | sed -n '2p' | cut -f5)"
         if [ -z "${_handshake_at}" ] || [ "${_handshake_at}" -eq 0 ] 2>/dev/null; then
@@ -88,6 +94,10 @@ watchdog_tick() {
             _wd_write_state
         fi
     else
+        # Tunnel down — arm kill-switch if not yet
+        if command -v pbr_kill_switch_arm >/dev/null 2>&1; then
+            pbr_kill_switch_arm
+        fi
         if _wd_try_restart_allowed "${_now}"; then
             log_warn "watchdog: tunnel down despite enabled, starting"
             tunnel_start
