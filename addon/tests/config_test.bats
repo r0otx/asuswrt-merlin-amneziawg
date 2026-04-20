@@ -409,3 +409,37 @@ _set_full_config_from_amnezia2() {
     run state_get "awg_privatekey"
     [ "$output" = "preexisting" ]
 }
+
+@test "config_validate accepts awg_default_policy values" {
+    _set_minimal_valid_config
+    state_set "awg_default_policy" "vpn_all"
+    config_load && config_validate
+    state_set "awg_default_policy" "direct"
+    config_load && config_validate
+    state_set "awg_default_policy" "vpn_geo"
+    config_load && config_validate
+}
+
+@test "config_validate rejects invalid awg_default_policy" {
+    _set_minimal_valid_config
+    state_set "awg_default_policy" "garbage"
+    config_load
+    ! config_validate
+    grep -q "default_policy" "${AMNEZIAWG_LOG_FILE}"
+}
+
+@test "config_validate accepts awg_killswitch_strict 0/1" {
+    _set_minimal_valid_config
+    state_set "awg_killswitch_strict" "0"
+    config_load && config_validate
+    state_set "awg_killswitch_strict" "1"
+    config_load && config_validate
+}
+
+@test "config_validate rejects non-CIDR awg_doh_blocklist entry" {
+    _set_minimal_valid_config
+    state_set "awg_doh_blocklist" "1.1.1.1/32,garbage"
+    config_load
+    ! config_validate
+    grep -q "doh_blocklist" "${AMNEZIAWG_LOG_FILE}"
+}

@@ -191,6 +191,11 @@ _CFG_KEYS="
     peer_endpoint
     peer_allowed_ips
     peer_keepalive
+    default_policy
+    killswitch_strict
+    ipv6_allow_bypass
+    doh_blocklist
+    geo_entries
 "
 
 config_load() {
@@ -289,6 +294,36 @@ config_validate() {
     if [ -n "${_cfg_peer_keepalive}" ]; then
         _config_validate_int_range "${_cfg_peer_keepalive}" 0 65535 \
             || _config_err "peer_keepalive invalid"
+    fi
+
+    # awg_default_policy: optional, default "direct"
+    case "${_cfg_default_policy:-direct}" in
+        direct|vpn_all|vpn_geo) ;;
+        *) _config_err "default_policy invalid (direct|vpn_all|vpn_geo, got '${_cfg_default_policy}')" ;;
+    esac
+
+    # awg_killswitch_strict: 0 or 1
+    case "${_cfg_killswitch_strict:-1}" in
+        0|1) ;;
+        *) _config_err "killswitch_strict must be 0 or 1" ;;
+    esac
+
+    # awg_ipv6_allow_bypass: 0 or 1
+    case "${_cfg_ipv6_allow_bypass:-0}" in
+        0|1) ;;
+        *) _config_err "ipv6_allow_bypass must be 0 or 1" ;;
+    esac
+
+    # awg_doh_blocklist: optional comma-separated CIDRs
+    if [ -n "${_cfg_doh_blocklist}" ]; then
+        _config_validate_cidr_list "${_cfg_doh_blocklist}" \
+            || _config_err "doh_blocklist: invalid CIDR list"
+    fi
+
+    # awg_geo_entries: optional comma-separated CIDRs
+    if [ -n "${_cfg_geo_entries}" ]; then
+        _config_validate_cidr_list "${_cfg_geo_entries}" \
+            || _config_err "geo_entries: invalid CIDR list"
     fi
 
     [ "${_config_bad}" -eq 0 ]
