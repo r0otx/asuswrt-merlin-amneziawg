@@ -128,7 +128,7 @@ pbr_apply() {
     # Per-device first (needed for vpn_all RETURN exceptions later)
     pbr_load_devices | while IFS="$(printf '\t')" read -r _n _ip _mac _name _policy; do
         if [ -n "${_mac}" ]; then
-            _resolved="$(_pbr_resolve_ip "${_mac}" 2>/dev/null)"
+            _resolved="$(_pbr_resolve_ip "${_mac}" 2>/dev/null)" || _resolved=""
             if [ -n "${_resolved}" ] && [ "${_resolved}" != "${_ip}" ]; then
                 log_warn "pbr: device ${_name:-#${_n}} IP changed ${_ip} -> ${_resolved} (using resolved)"
                 _ip="${_resolved}"

@@ -53,7 +53,12 @@ event_wan() {
 
 event_firewall() {
     _wan_if="$1"
-    log_debug "event_firewall: ${_wan_if} (stub — M3 will setup PBR here)"
+    log_debug "event_firewall: wan_if=${_wan_if}"
+    if command -v pbr_reapply_incremental >/dev/null 2>&1; then
+        pbr_reapply_incremental
+    else
+        log_warn "event_firewall: pbr_reapply_incremental not available"
+    fi
 }
 
 event_services_start() {

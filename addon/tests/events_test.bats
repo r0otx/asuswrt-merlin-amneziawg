@@ -25,6 +25,11 @@ EOF
     cat > "${TMPDIR_TEST}/bin/ip" <<EOF
 #!/bin/sh
 [ "\$1" = "link" ] && [ "\$2" = "show" ] && { [ -f "${TMPDIR_TEST}/link-up" ] && exit 0 || exit 1; }
+case "\$1 \$2" in
+    "neigh show") echo "" ;;
+    "rule add"|"rule del"|"route add"|"route replace"|"route del")
+        printf 'ip %s\n' "\$*" >> "${TMPDIR_TEST}/ip.log" ;;
+esac
 exit 0
 EOF
     chmod +x "${TMPDIR_TEST}/bin/ip"
@@ -52,7 +57,11 @@ EOF
     chmod +x "${TMPDIR_TEST}/bin/flock"
     cat > "${TMPDIR_TEST}/bin/nvram" <<'EOF'
 #!/bin/sh
-exit 0
+case "$2" in
+    lan_ipaddr)  echo "192.168.1.1" ;;
+    lan_netmask) echo "255.255.255.0" ;;
+    *) echo "" ;;
+esac
 EOF
     chmod +x "${TMPDIR_TEST}/bin/nvram"
     cat > "${TMPDIR_TEST}/bin/awg" <<'EOF'
@@ -66,6 +75,9 @@ printf 'cru %s\n' "\$*" >> "${MOCK_LOG}"
 EOF
     chmod +x "${TMPDIR_TEST}/bin/cru"
 
+    . "${BATS_TEST_DIRNAME}/fixtures/mock_iptables.sh"; mock_iptables_install
+    . "${BATS_TEST_DIRNAME}/fixtures/mock_ipset.sh";    mock_ipset_install
+
     . "${BATS_TEST_DIRNAME}/../lib/log.sh"
     . "${BATS_TEST_DIRNAME}/../lib/state.sh"
     . "${BATS_TEST_DIRNAME}/../lib/hooks.sh"
@@ -73,6 +85,10 @@ EOF
     . "${BATS_TEST_DIRNAME}/../lib/config.sh"
     . "${BATS_TEST_DIRNAME}/../lib/tunnel.sh"
     . "${BATS_TEST_DIRNAME}/../lib/status.sh"
+    . "${BATS_TEST_DIRNAME}/../lib/iptables_chain.sh"
+    . "${BATS_TEST_DIRNAME}/../lib/dns.sh"
+    . "${BATS_TEST_DIRNAME}/../lib/firewall.sh"
+    . "${BATS_TEST_DIRNAME}/../lib/pbr.sh"
     . "${BATS_TEST_DIRNAME}/../lib/events.sh"
 
     state_set "awg_enabled"           "1"
@@ -153,8 +169,17 @@ teardown() {
     ! grep -q "^awg-quick" "${MOCK_LOG}"
 }
 
-@test "event_firewall is stub (M3 will extend)" {
+@test "event_firewall calls pbr_reapply_incremental" {
+    # Device state unchanged — no-op expected
+    state_set "awg_dev_count" "1"
+    state_set "awg_dev_0_ip" "192.168.1.100"
+    state_set "awg_dev_0_mac" "aa:bb:cc:dd:ee:01"
+    state_set "awg_dev_0_name" "x"
+    state_set "awg_dev_0_policy" "vpn_all"
+    pbr_setup
+    : > "${TMPDIR_TEST}/ip.log"
     event_firewall eth0
+    ! grep -q 'rule add' "${TMPDIR_TEST}/ip.log"
 }
 
 @test "event_services_start installs cron entry" {
