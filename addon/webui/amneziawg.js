@@ -690,4 +690,145 @@
         };
     })();
 
+
+    // ---------- AWG.import ----------
+
+    AWG.import = (function () {
+        var _preview = null;
+
+        function openModal() {
+            var modal = AWG.util.$('awg-import-modal');
+            if (modal) modal.style.display = 'block';
+            var ta = AWG.util.$('awg-import-text');
+            if (ta) ta.focus();
+            var preview = AWG.util.$('awg-import-preview');
+            if (preview) {
+                while (preview.firstChild) preview.removeChild(preview.firstChild);
+            }
+            _preview = null;
+        }
+
+        function closeModal() {
+            var modal = AWG.util.$('awg-import-modal');
+            if (modal) modal.style.display = 'none';
+            _preview = null;
+        }
+
+        function parsePreview() {
+            var ta = AWG.util.$('awg-import-text');
+            var preview = AWG.util.$('awg-import-preview');
+            if (!ta || !preview) return;
+
+            var text = ta.value || '';
+            while (preview.firstChild) preview.removeChild(preview.firstChild);
+
+            var parsed = AWG.parser.parseConf(text);
+            if (!parsed.ok) {
+                _preview = null;
+                _renderErrors(preview, parsed.errors);
+                return;
+            }
+
+            var vres = AWG.validator.validateAll(parsed.config);
+            if (!vres.ok) {
+                _preview = null;
+                _renderErrors(preview, vres.errors);
+                _renderFields(preview, parsed.config);
+                return;
+            }
+
+            _preview = parsed.config;
+            _renderFields(preview, parsed.config);
+
+            var okMsg = document.createElement('div');
+            okMsg.className = 'awg-import-ok';
+            okMsg.textContent = '✓ All fields valid. Click "Populate Form" to apply.';
+            preview.appendChild(okMsg);
+        }
+
+        function _renderErrors(preview, errors) {
+            var ul = document.createElement('ul');
+            ul.className = 'awg-import-errors';
+            for (var i = 0; i < errors.length; i++) {
+                var li = document.createElement('li');
+                li.textContent = errors[i];
+                ul.appendChild(li);
+            }
+            preview.appendChild(ul);
+        }
+
+        function _renderFields(preview, config) {
+            var table = document.createElement('table');
+            table.className = 'awg-import-fields';
+            var emit = function (section, k, v) {
+                if (!v && v !== 0) return;
+                var tr = document.createElement('tr');
+                var tdK = document.createElement('td');
+                tdK.textContent = section + '.' + k;
+                var tdV = document.createElement('td');
+                tdV.textContent = v;
+                tr.appendChild(tdK);
+                tr.appendChild(tdV);
+                table.appendChild(tr);
+            };
+            var iface = config.interface || {};
+            var peer = config.peer || {};
+            Object.keys(iface).forEach(function (k) { emit('interface', k, iface[k]); });
+            Object.keys(peer).forEach(function (k) { emit('peer', k, peer[k]); });
+            preview.appendChild(table);
+        }
+
+        function populateFromPreview() {
+            if (!_preview) {
+                alert('No valid preview to apply. Click "Parse & Preview" first.');
+                return;
+            }
+            var flat = {};
+            var iface = _preview.interface || {};
+            var peer  = _preview.peer || {};
+
+            // Interface → awg_* keys
+            var IFACE_KEYS = {
+                privatekey: 'awg_privatekey',
+                address:    'awg_address',
+                dns:        'awg_dns',
+                mtu:        'awg_mtu',
+                jc:         'awg_jc',
+                jmin:       'awg_jmin',
+                jmax:       'awg_jmax'
+            };
+            Object.keys(IFACE_KEYS).forEach(function (k) {
+                if (iface[k] != null) flat[IFACE_KEYS[k]] = iface[k];
+            });
+            ['s1','s2','s3','s4','h1','h2','h3','h4','i1','i2','i3','i4','i5'].forEach(function (k) {
+                if (iface[k] != null) flat['awg_' + k] = iface[k];
+            });
+
+            var PEER_KEYS = {
+                publickey:    'awg_peer_publickey',
+                presharedkey: 'awg_peer_presharedkey',
+                endpoint:     'awg_peer_endpoint',
+                allowed_ips:  'awg_peer_allowed_ips',
+                keepalive:    'awg_peer_keepalive'
+            };
+            Object.keys(PEER_KEYS).forEach(function (k) {
+                if (peer[k] != null) flat[PEER_KEYS[k]] = peer[k];
+            });
+
+            // Enable flag defaults to 1 on import
+            flat.awg_enabled = '1';
+
+            AWG.config.populateForm(flat);
+            AWG.config.markDirty();
+            closeModal();
+        }
+
+        return {
+            openModal: openModal,
+            closeModal: closeModal,
+            parsePreview: parsePreview,
+            populateFromPreview: populateFromPreview
+        };
+    })();
+
 })(window);
