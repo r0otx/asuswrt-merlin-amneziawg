@@ -126,3 +126,26 @@ _add_device() {
     # AMNEZIAWG chain should be empty of -A rules
     [ -z "$(iptables -t mangle -S AMNEZIAWG 2>/dev/null | grep '^-A')" ]
 }
+
+@test "default_policy=vpn_all adds blanket MARK for LAN subnet with direct exceptions" {
+    _add_device 0 192.168.1.100 aa:bb:cc:dd:ee:01 laptop direct
+    state_set "awg_default_policy" "vpn_all"
+    pbr_setup
+    # Exception comes first
+    iptables -t mangle -S AMNEZIAWG | grep -q -- '-s 192.168.1.100 -j RETURN'
+    # Blanket LAN MARK (uses /24 mask computed from nvram netmask 255.255.255.0)
+    iptables -t mangle -S AMNEZIAWG | grep -qE -- '-s 192.168.1.0/24 -j MARK --set-mark 0x100/0xFF00'
+}
+
+@test "default_policy=direct adds no blanket MARK" {
+    _add_device 0 192.168.1.100 aa:bb:cc:dd:ee:01 laptop vpn_all
+    state_set "awg_default_policy" "direct"
+    pbr_setup
+    ! iptables -t mangle -S AMNEZIAWG | grep -qE -- '-s 192.168.1.0/24 -j MARK'
+}
+
+@test "default_policy unset behaves as direct" {
+    state_delete "awg_default_policy"
+    pbr_setup
+    ! iptables -t mangle -S AMNEZIAWG | grep -qE -- '-s 192.168.1.0/24 -j MARK'
+}
