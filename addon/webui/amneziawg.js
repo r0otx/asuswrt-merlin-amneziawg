@@ -901,4 +901,49 @@
         };
     })();
 
+
+    // ---------- AWG.init ----------
+
+    AWG.init = (function () {
+        function onReady() {
+            // 1. Load initial state injected by ASP in <head>
+            var cs = global._customSettingsInline || {};
+            AWG.config.populateForm(cs);
+
+            // 2. Take snapshot (baseline) AFTER populate so dirty detection works
+            AWG.config.snapshot();
+
+            // 3. Bind input events for dirty tracking
+            var inputs = document.querySelectorAll('input, select, textarea');
+            for (var i = 0; i < inputs.length; i++) {
+                inputs[i].addEventListener('change', AWG.config.markDirty);
+                inputs[i].addEventListener('input',  AWG.config.markDirty);
+            }
+
+            // 4. Start polling
+            var intervalSec = parseInt(cs.awg_ui_poll_interval || '5', 10);
+            if (!(intervalSec >= 1 && intervalSec <= 60)) intervalSec = 5;
+            AWG.status.startPolling(intervalSec * 1000);
+
+            // 5. beforeunload guard
+            global.addEventListener('beforeunload', function (e) {
+                if (AWG.config.isDirty()) {
+                    e.preventDefault();
+                    e.returnValue = '';
+                }
+            });
+        }
+
+        if (typeof document !== 'undefined') {
+            if (document.readyState === 'loading') {
+                document.addEventListener('DOMContentLoaded', onReady);
+            } else {
+                // Already loaded (defer script after DOMContentLoaded)
+                setTimeout(onReady, 0);
+            }
+        }
+
+        return { onReady: onReady };
+    })();
+
 })(window);
