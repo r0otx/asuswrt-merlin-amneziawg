@@ -1,2 +1,122 @@
-/* addon/webui/amneziawg.css — Module 1: empty placeholder.
-   Module 4 will extract inline styles from amneziawg_page.asp. */
+/* addon/webui/amneziawg.css — AmneziaWG WebUI styles (complements Merlin CSS). */
+
+/* ---------- Status widget ---------- */
+.awg-status-widget {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16px;
+  padding: 8px 12px;
+  margin: 8px 0;
+  border-radius: 4px;
+  font-size: 13px;
+}
+.awg-status-widget > span { white-space: nowrap; }
+.awg-status-widget.awg-state-running  { background: #2e5b37; color: #d4edda; }
+.awg-status-widget.awg-state-stopped  { background: #5a2d2d; color: #f8d7da; }
+.awg-status-widget.awg-state-failed   { background: #6b5a1f; color: #fff3cd; }
+.awg-status-widget.awg-status-stale   { opacity: 0.5; }
+
+/* ---------- Conflict banner ---------- */
+.awg-conflict-banner {
+  background: #6b5a1f;
+  color: #fff3cd;
+  padding: 8px 12px;
+  margin: 8px 0;
+  border-radius: 4px;
+  font-weight: bold;
+}
+
+/* ---------- Kill-switch badge ---------- */
+#awg-killswitch-badge {
+  background: #5a2d2d;
+  color: #f8d7da;
+  padding: 2px 8px;
+  border-radius: 10px;
+  font-weight: bold;
+}
+
+/* ---------- PBR device table ---------- */
+#awg-devices { margin-top: 8px; }
+#awg-devices th { background: #3a464b; }
+.awg-device-row.awg-policy-vpn_all { background: rgba(70, 100, 150, 0.2); }
+.awg-device-row.awg-policy-vpn_geo { background: rgba(70, 150, 100, 0.2); }
+.awg-device-row.awg-policy-direct  { background: rgba(100, 100, 100, 0.1); }
+
+/* ---------- Log tail ---------- */
+.awg-log-tail {
+  font-family: monospace;
+  font-size: 11px;
+  white-space: pre-wrap;
+  max-height: 220px;
+  overflow-y: auto;
+  background: #1c1c1c;
+  color: #c0c0c0;
+  padding: 6px 10px;
+  border: 1px solid #3a464b;
+  border-radius: 4px;
+}
+
+/* ---------- Import modal ---------- */
+.awg-import-modal {
+  position: fixed;
+  top: 0; left: 0;
+  width: 100%; height: 100%;
+  background: rgba(0, 0, 0, 0.7);
+  z-index: 10000;
+}
+.awg-import-inner {
+  position: absolute;
+  top: 50%; left: 50%;
+  transform: translate(-50%, -50%);
+  background: #2b3438;
+  color: #e0e0e0;
+  padding: 20px;
+  border-radius: 6px;
+  min-width: 640px;
+  max-width: 90vw;
+  max-height: 90vh;
+  overflow-y: auto;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.5);
+}
+.awg-import-inner h3 { margin-top: 0; }
+.awg-import-inner textarea {
+  width: 100%;
+  box-sizing: border-box;
+  font-family: monospace;
+  font-size: 12px;
+  background: #1c1c1c;
+  color: #c0c0c0;
+  border: 1px solid #3a464b;
+  padding: 6px;
+}
+.awg-import-preview { margin-top: 12px; }
+.awg-import-errors {
+  background: #5a2d2d;
+  color: #f8d7da;
+  padding: 8px 14px;
+  border-radius: 4px;
+  list-style: disc;
+}
+.awg-import-ok {
+  background: #2e5b37;
+  color: #d4edda;
+  padding: 6px 12px;
+  border-radius: 4px;
+  margin-top: 8px;
+}
+.awg-import-fields {
+  width: 100%;
+  margin-top: 8px;
+  font-size: 12px;
+}
+.awg-import-fields td { padding: 2px 8px; border-bottom: 1px solid #3a464b; }
+.awg-import-fields td:first-child { color: #9ab; font-family: monospace; }
+
+/* ---------- Actions bar ---------- */
+.awg-actions {
+  margin-top: 16px;
+  padding-top: 10px;
+  border-top: 1px solid #3a464b;
+  text-align: right;
+}
+.awg-actions .button_gen { margin-left: 8px; }
