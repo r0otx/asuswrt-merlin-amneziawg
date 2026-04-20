@@ -831,4 +831,74 @@
         };
     })();
 
+
+    // ---------- AWG.forms ----------
+
+    AWG.forms = (function () {
+
+        // Build synthetic {interface, peer} config from the flat form data —
+        // needed for AWG.validator.validateAll, which expects nested structure.
+        function _buildConfigFromFlat(flat) {
+            var iface = {
+                privatekey: flat.awg_privatekey,
+                address:    flat.awg_address,
+                dns:        flat.awg_dns,
+                mtu:        flat.awg_mtu,
+                jc:         flat.awg_jc,
+                jmin:       flat.awg_jmin,
+                jmax:       flat.awg_jmax,
+                s1: flat.awg_s1, s2: flat.awg_s2, s3: flat.awg_s3, s4: flat.awg_s4,
+                h1: flat.awg_h1, h2: flat.awg_h2, h3: flat.awg_h3, h4: flat.awg_h4,
+                i1: flat.awg_i1, i2: flat.awg_i2, i3: flat.awg_i3, i4: flat.awg_i4, i5: flat.awg_i5
+            };
+            var peer = {
+                publickey:    flat.awg_peer_publickey,
+                presharedkey: flat.awg_peer_presharedkey,
+                endpoint:     flat.awg_peer_endpoint,
+                allowed_ips:  flat.awg_peer_allowed_ips,
+                keepalive:    flat.awg_peer_keepalive
+            };
+            return { interface: iface, peer: peer };
+        }
+
+        function submitSave() {
+            var flat = AWG.config.readForm();
+
+            // Pre-flight validation (mirror of backend)
+            var cfg = _buildConfigFromFlat(flat);
+            var res = AWG.validator.validateAll(cfg);
+            if (!res.ok) {
+                alert('Configuration validation errors:\n\n' + res.errors.join('\n'));
+                return;
+            }
+
+            var amng = AWG.util.$('amng_custom');
+            var as = AWG.util.$('action_script');
+            if (!amng || !as) {
+                alert('Form hidden inputs missing — page broken');
+                return;
+            }
+            amng.value = JSON.stringify(flat);
+            as.value = 'start_awgsaveconf';
+
+            AWG.config.clearDirty();
+            document.forms['amneziawg_form'].submit();
+        }
+
+        function submitControl(action) {
+            // action: 'awgstart' | 'awgstop' | 'awgrestart'
+            var amng = AWG.util.$('amng_custom');
+            var as = AWG.util.$('action_script');
+            if (!amng || !as) return;
+            amng.value = '';
+            as.value = 'start_' + action;
+            document.forms['amneziawg_form'].submit();
+        }
+
+        return {
+            submitSave: submitSave,
+            submitControl: submitControl
+        };
+    })();
+
 })(window);
