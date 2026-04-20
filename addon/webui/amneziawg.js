@@ -408,4 +408,97 @@
         };
     })();
 
+    // ---------- AWG.status ----------
+
+    AWG.status = (function () {
+        var _timerId = null;
+        var _lastLeasesKey = '';
+
+        function _leasesKey(leases) {
+            if (!leases || !leases.length) return '';
+            var macs = [];
+            for (var i = 0; i < leases.length; i++) macs.push(leases[i].mac || '');
+            macs.sort();
+            return macs.join('|');
+        }
+
+        function _render(status) {
+            var widget = AWG.util.$('awg-status-widget');
+            if (widget) {
+                widget.className = 'awg-status-widget awg-state-' + (status.state || 'stopped');
+                widget.classList.remove('awg-status-stale');
+            }
+
+            var setText = function (id, value) {
+                var el = AWG.util.$(id);
+                if (el) el.textContent = (value == null ? '' : String(value));
+            };
+
+            setText('awg-status-state',     status.state || 'stopped');
+            setText('awg-status-endpoint',  status.endpoint || '—');
+            setText('awg-status-handshake', AWG.util.formatAge(status.handshake_age_seconds));
+            setText('awg-status-rxtx',
+                    AWG.util.humanizeBytes(status.rx_bytes) + ' / ' +
+                    AWG.util.humanizeBytes(status.tx_bytes));
+
+            var banner = AWG.util.$('awg-conflict-banner');
+            if (banner) banner.style.display = status.stock_wg_conflict ? 'block' : 'none';
+
+            var ksBadge = AWG.util.$('awg-killswitch-badge');
+            if (ksBadge) {
+                if (status.killswitch_armed) {
+                    ksBadge.textContent = '🔒 Kill-switch ACTIVE';
+                    ksBadge.style.display = 'inline-block';
+                } else {
+                    ksBadge.style.display = 'none';
+                }
+            }
+
+            var logTail = AWG.util.$('awg-log-tail');
+            if (logTail) logTail.textContent = status.daemon_log_tail || '(no log entries)';
+
+            // Leases — update DHCP picker only on change
+            var leasesKey = _leasesKey(status.leases);
+            if (leasesKey !== _lastLeasesKey) {
+                _lastLeasesKey = leasesKey;
+                if (AWG.pbr && AWG.pbr.updateLeasePicker) {
+                    AWG.pbr.updateLeasePicker(status.leases || []);
+                }
+            }
+        }
+
+        function _renderError(err) {
+            var widget = AWG.util.$('awg-status-widget');
+            if (widget) widget.classList.add('awg-status-stale');
+            // Don't wipe last-known data; just mark stale.
+            if (typeof console !== 'undefined' && console.warn) {
+                console.warn('awg status fetch failed:', err);
+            }
+        }
+
+        function _tick() {
+            fetch('/user/awg_status.htm', { cache: 'no-store' })
+                .then(function (r) { return r.ok ? r.json() : Promise.reject('HTTP ' + r.status); })
+                .then(_render)
+                .catch(_renderError);
+        }
+
+        function startPolling(intervalMs) {
+            stopPolling();
+            _tick();
+            _timerId = setInterval(_tick, intervalMs);
+        }
+
+        function stopPolling() {
+            if (_timerId) { clearInterval(_timerId); _timerId = null; }
+        }
+
+        return {
+            startPolling: startPolling,
+            stopPolling: stopPolling,
+            _tick: _tick,
+            _render: _render
+        };
+    })();
+
 })(window);
