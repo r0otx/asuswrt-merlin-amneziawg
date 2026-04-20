@@ -16,5 +16,6 @@ amneziawg_h1 1
 amneziawg_h2 2
 amneziawg_h3 3
 amneziawg_h4 4
-amneziawg_devices {"policy":"all"}
+amneziawg_devices [{"ip":"192.168.1.100","name":"laptop","mac":"aa:bb:cc:dd:ee:01","policy":"vpn_all"},{"ip":"192.168.1.105","name":"phone","mac":"aa:bb:cc:dd:ee:02","policy":"vpn_geo"}]
+amneziawg_default_policy direct
 unrelated_key leave_me_alone

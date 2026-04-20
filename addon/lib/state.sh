@@ -89,7 +89,8 @@ amneziawg_i3:awg_i3
 amneziawg_i4:awg_i4
 amneziawg_i5:awg_i5
 amneziawg_persistent_keepalive:awg_peer_keepalive
-amneziawg_enabled:awg_enabled"
+amneziawg_enabled:awg_enabled
+amneziawg_default_policy:awg_default_policy"
 
 : "${AMNEZIAWG_V1_ADDON_DIR:=/jffs/addons/amneziawg}"
 : "${AMNEZIAWG_V1_OPT_DIR:=/opt/amneziawg}"
@@ -112,6 +113,60 @@ _state_rotate_backups() {
     ls -t "${AMNEZIAWG_BACKUP_DIR}/${_prefix}"*.tar.gz 2>/dev/null \
         | awk 'NR>5' \
         | xargs rm -f 2>/dev/null || true
+}
+
+_state_migrate_v1_devices() {
+    _blob="$(state_get amneziawg_devices 2>/dev/null)"
+    [ -n "${_blob}" ] || return 0
+    # Parse JSON array of objects — best-effort awk split.
+    # v1 format: [{"ip":"x","name":"y","mac":"z","policy":"all"},{...}]
+    case "${_blob}" in
+        \[*\])
+            : ;;
+        *)
+            log_warn "migrate_from_v1: v1 devices blob unparseable, skipping"
+            state_delete amneziawg_devices
+            return 0 ;;
+    esac
+    _n=0
+    # Strip leading [ and trailing ]
+    _inner="${_blob#[}"
+    _inner="${_inner%]}"
+    # Use awk to walk objects
+    _tmp="$(mktemp)"
+    printf '%s' "${_inner}" | awk '
+        {
+            gsub(/\},\{/, "\n")
+            gsub(/^\{/, "")
+            gsub(/\}$/, "")
+            print
+        }
+    ' > "${_tmp}"
+    while IFS= read -r _obj; do
+        [ -n "${_obj}" ] || continue
+        _ip="$(printf '%s' "${_obj}" | awk 'BEGIN{FS="\"ip\":\""} NF>1 {split($2, a, "\""); print a[1]}')"
+        _name="$(printf '%s' "${_obj}" | awk 'BEGIN{FS="\"name\":\""} NF>1 {split($2, a, "\""); print a[1]}')"
+        _mac="$(printf '%s' "${_obj}" | awk 'BEGIN{FS="\"mac\":\""} NF>1 {split($2, a, "\""); print a[1]}')"
+        _policy="$(printf '%s' "${_obj}" | awk 'BEGIN{FS="\"policy\":\""} NF>1 {split($2, a, "\""); print a[1]}')"
+        [ -n "${_ip}" ] || continue
+        case "${_policy}" in
+            all)     _policy="vpn_all" ;;
+            geo)     _policy="vpn_geo" ;;
+            vpn_all) : ;;
+            vpn_geo) : ;;
+            direct)  : ;;
+            *)       _policy="direct" ;;
+        esac
+        state_set "awg_dev_${_n}_ip"     "${_ip}"
+        state_set "awg_dev_${_n}_name"   "${_name}"
+        state_set "awg_dev_${_n}_mac"    "${_mac}"
+        state_set "awg_dev_${_n}_policy" "${_policy}"
+        _n=$(( _n + 1 ))
+    done < "${_tmp}"
+    rm -f "${_tmp}"
+    [ "${_n}" -gt 0 ] && state_set "awg_dev_count" "${_n}"
+    state_delete amneziawg_devices
+    log_info "migrate_from_v1: migrated ${_n} device entries"
 }
 
 migrate_from_v1() {
@@ -168,10 +223,13 @@ migrate_from_v1() {
     done < "${_map_tmp}"
     rm -f "${_map_tmp}"
 
-    # Save remaining unmigrated amneziawg_* keys
+    # Save remaining unmigrated amneziawg_* keys (before device migration deletes them)
     _state_ensure_backup_dir
     awk '/^amneziawg_/ { print }' "${AMNEZIAWG_CUSTOM_SETTINGS}" \
         > "${AMNEZIAWG_UNMIGRATED_KEYS}" 2>/dev/null || :
+
+    # Translate v1 'amneziawg_devices' JSON blob into per-device awg_dev_N_* keys.
+    _state_migrate_v1_devices
 
     # Remove v1 hook invocations from /jffs/scripts/* (strict line pattern).
     for _hook in service-event firewall-start wan-event services-start; do
