@@ -70,7 +70,7 @@ case "${_op}" in
     -D)
         _chain="$1"; shift
         _needle="-A ${_chain} $*"
-        grep -vxF -- "${_needle}" "${_state}" > "${_state}.tmp" && mv "${_state}.tmp" "${_state}"
+        grep -vxF -- "${_needle}" "${_state}" > "${_state}.tmp"; mv "${_state}.tmp" "${_state}"
         exit 0 ;;
     -C)
         _chain="$1"; shift
@@ -113,7 +113,7 @@ case "${_op}" in
     -I) _chain="$1"; shift; case "$1" in ''|*[!0-9]*) : ;; *) shift ;; esac
         { printf '%s\n' "-A ${_chain} $*"; cat "${_state}"; } > "${_state}.tmp" && mv "${_state}.tmp" "${_state}"; exit 0 ;;
     -A) _chain="$1"; shift; printf '%s\n' "-A ${_chain} $*" >> "${_state}"; exit 0 ;;
-    -D) _chain="$1"; shift; grep -vxF -- "-A ${_chain} $*" "${_state}" > "${_state}.tmp" && mv "${_state}.tmp" "${_state}"; exit 0 ;;
+    -D) _chain="$1"; shift; grep -vxF -- "-A ${_chain} $*" "${_state}" > "${_state}.tmp"; mv "${_state}.tmp" "${_state}"; exit 0 ;;
     -S|-L) [ -n "$1" ] && grep -E "^(:|-A )$1( |\$)" "${_state}" || cat "${_state}"; exit 0 ;;
     -F) _chain="$1"; awk -v c="${_chain}" '$0 !~ "^-A "c" " && $0 !~ "^-A "c"$"' "${_state}" > "${_state}.tmp" && mv "${_state}.tmp" "${_state}"; exit 0 ;;
     *) exit 0 ;;
