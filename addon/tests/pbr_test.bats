@@ -149,3 +149,32 @@ _add_device() {
     pbr_setup
     ! iptables -t mangle -S AMNEZIAWG | grep -qE -- '-s 192.168.1.0/24 -j MARK'
 }
+
+@test "pbr_kill_switch_arm adds DROPs for mark + vpn devices" {
+    _add_device 0 192.168.1.100 aa:bb:cc:dd:ee:01 laptop vpn_all
+    _add_device 1 192.168.1.105 aa:bb:cc:dd:ee:02 phone  vpn_geo
+    pbr_setup
+    pbr_kill_switch_arm
+    iptables -S AMNEZIAWG_KILL | grep -q -- '-m mark --mark 0x100/0xFF00 -j DROP'
+    iptables -S AMNEZIAWG_KILL | grep -q -- '-s 192.168.1.100 -j DROP'
+    iptables -S AMNEZIAWG_KILL | grep -q -- '-s 192.168.1.105 -j DROP'
+    [ -f "${AMNEZIAWG_RUNTIME}/killswitch-armed" ]
+}
+
+@test "pbr_kill_switch_disarm empties chain and removes flag" {
+    _add_device 0 192.168.1.100 aa:bb:cc:dd:ee:01 laptop vpn_all
+    pbr_setup
+    pbr_kill_switch_arm
+    pbr_kill_switch_disarm
+    ! iptables -S AMNEZIAWG_KILL | grep -q '^-A'
+    [ ! -f "${AMNEZIAWG_RUNTIME}/killswitch-armed" ]
+}
+
+@test "pbr_kill_switch_arm does nothing when killswitch_strict=0" {
+    state_set "awg_killswitch_strict" "0"
+    _add_device 0 192.168.1.100 aa:bb:cc:dd:ee:01 laptop vpn_all
+    pbr_setup
+    pbr_kill_switch_arm
+    ! iptables -S AMNEZIAWG_KILL | grep -q -- '-j DROP'
+    [ ! -f "${AMNEZIAWG_RUNTIME}/killswitch-armed" ]
+}
