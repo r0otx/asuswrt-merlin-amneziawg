@@ -178,3 +178,70 @@ _add_device() {
     ! iptables -S AMNEZIAWG_KILL | grep -q -- '-j DROP'
     [ ! -f "${AMNEZIAWG_RUNTIME}/killswitch-armed" ]
 }
+
+@test "pbr_reapply_incremental skips when state unchanged" {
+    _add_device 0 192.168.1.100 aa:bb:cc:dd:ee:01 laptop vpn_all
+    pbr_setup
+    : > "${TMPDIR_TEST}/ip.log"
+    pbr_reapply_incremental
+    ! grep -q 'rule add' "${TMPDIR_TEST}/ip.log"
+}
+
+@test "pbr_reapply_incremental re-applies when device added" {
+    _add_device 0 192.168.1.100 aa:bb:cc:dd:ee:01 laptop vpn_all
+    pbr_setup
+    : > "${TMPDIR_TEST}/ip.log"
+    _add_device 1 192.168.1.105 aa:bb:cc:dd:ee:02 phone  vpn_all
+    pbr_reapply_incremental
+    grep -q 'rule add from 192.168.1.105 lookup 300 prio 99' "${TMPDIR_TEST}/ip.log"
+}
+
+@test "pbr_geo_add appends to awg_geo_entries" {
+    pbr_geo_add "1.2.3.0/24"
+    pbr_geo_add "5.6.7.8/32"
+    run state_get "awg_geo_entries"
+    [ "$output" = "1.2.3.0/24,5.6.7.8/32" ]
+}
+
+@test "pbr_geo_remove deletes a CIDR from the list" {
+    state_set "awg_geo_entries" "1.2.3.0/24,5.6.7.8/32,9.9.9.9/32"
+    pbr_geo_remove "5.6.7.8/32"
+    run state_get "awg_geo_entries"
+    [ "$output" = "1.2.3.0/24,9.9.9.9/32" ]
+}
+
+@test "pbr_geo_apply populates ipset via ipset-restore batch" {
+    state_set "awg_geo_entries" "10.0.0.0/8,192.168.100.0/24"
+    pbr_geo_apply
+    ipset test awg_geo_dst 10.0.0.0/8
+    ipset test awg_geo_dst 192.168.100.0/24
+}
+
+@test "pbr_device_set appends new device entry" {
+    pbr_device_set 192.168.1.100 vpn_all laptop aa:bb:cc:dd:ee:01
+    run state_get "awg_dev_count"
+    [ "$output" = "1" ]
+    run state_get "awg_dev_0_ip"
+    [ "$output" = "192.168.1.100" ]
+    run state_get "awg_dev_0_policy"
+    [ "$output" = "vpn_all" ]
+}
+
+@test "pbr_device_set updates existing entry by IP" {
+    pbr_device_set 192.168.1.100 vpn_all laptop aa:bb:cc:dd:ee:01
+    pbr_device_set 192.168.1.100 direct laptop aa:bb:cc:dd:ee:01
+    run state_get "awg_dev_count"
+    [ "$output" = "1" ]
+    run state_get "awg_dev_0_policy"
+    [ "$output" = "direct" ]
+}
+
+@test "pbr_device_remove decrements count and shifts entries" {
+    pbr_device_set 192.168.1.100 vpn_all laptop aa:bb:cc:dd:ee:01
+    pbr_device_set 192.168.1.105 vpn_geo phone  aa:bb:cc:dd:ee:02
+    pbr_device_remove 192.168.1.100
+    run state_get "awg_dev_count"
+    [ "$output" = "1" ]
+    run state_get "awg_dev_0_ip"
+    [ "$output" = "192.168.1.105" ]
+}

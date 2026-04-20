@@ -289,3 +289,66 @@ pbr_geo_apply() {
     fi
     rm -f "${_tmp}"
 }
+
+pbr_device_set() {
+    _ip="$1"; _policy="$2"; _name="$3"; _mac="$4"
+    [ -n "${_ip}" ] && [ -n "${_policy}" ] || return 1
+    _count="$(state_get awg_dev_count)"
+    [ -z "${_count}" ] && _count=0
+    _found=-1
+    _i=0
+    while [ "${_i}" -lt "${_count}" ]; do
+        _cur_ip="$(state_get "awg_dev_${_i}_ip")"
+        if [ "${_cur_ip}" = "${_ip}" ]; then _found="${_i}"; break; fi
+        _i=$(( _i + 1 ))
+    done
+    if [ "${_found}" -ge 0 ]; then
+        _idx="${_found}"
+    else
+        _idx="${_count}"
+        state_set "awg_dev_count" "$(( _count + 1 ))"
+    fi
+    state_set "awg_dev_${_idx}_ip"     "${_ip}"
+    state_set "awg_dev_${_idx}_policy" "${_policy}"
+    state_set "awg_dev_${_idx}_name"   "${_name}"
+    state_set "awg_dev_${_idx}_mac"    "${_mac}"
+}
+
+pbr_device_remove() {
+    _ip="$1"
+    _count="$(state_get awg_dev_count)"
+    [ -z "${_count}" ] || [ "${_count}" -le 0 ] 2>/dev/null && return 0
+
+    _found=-1
+    _i=0
+    while [ "${_i}" -lt "${_count}" ]; do
+        _cur_ip="$(state_get "awg_dev_${_i}_ip")"
+        if [ "${_cur_ip}" = "${_ip}" ]; then _found="${_i}"; break; fi
+        _i=$(( _i + 1 ))
+    done
+    [ "${_found}" -ge 0 ] || return 0
+
+    # Shift all entries [found+1 .. count-1] down by 1
+    _j="${_found}"
+    while [ "${_j}" -lt "$(( _count - 1 ))" ]; do
+        _next=$(( _j + 1 ))
+        for _field in ip mac name policy; do
+            _v="$(state_get "awg_dev_${_next}_${_field}")"
+            state_set "awg_dev_${_j}_${_field}" "${_v}"
+        done
+        _j=$(( _j + 1 ))
+    done
+    # Clear last
+    for _field in ip mac name policy; do
+        state_delete "awg_dev_$(( _count - 1 ))_${_field}"
+    done
+    state_set "awg_dev_count" "$(( _count - 1 ))"
+}
+
+pbr_default_set() {
+    _policy="$1"
+    case "${_policy}" in
+        direct|vpn_all|vpn_geo) state_set "awg_default_policy" "${_policy}" ;;
+        *) log_error "pbr_default_set: invalid policy '${_policy}'"; return 1 ;;
+    esac
+}
