@@ -135,6 +135,7 @@
                       <option value="direct">direct (not in VPN)</option>
                       <option value="vpn_all">vpn_all (whole LAN via VPN)</option>
                       <option value="vpn_geo">vpn_geo (only to geo IPs)</option>
+                      <option value="vpn_except_geo">vpn_except_geo (VPN except bypass IPs)</option>
                     </select>
                   </td></tr>
             </table>
@@ -158,10 +159,42 @@
               <button type="button" class="form_button" onclick="AWG.pbr.addManual()">Add</button>
             </p>
             <table class="FormTable" width="100%">
-              <tr><th>Geo Entries (CIDRs, comma-separated)</th>
+              <tr><th>Manual Geo Entries — VPN pool (CIDRs, comma-separated)</th>
                   <td><textarea id="awg_geo_entries" class="form_input" rows="3" cols="60"
                                 placeholder="10.0.0.0/8, 1.2.3.4/32"></textarea></td></tr>
+              <tr><th>Manual Geo Entries — Direct/bypass pool (CIDRs)</th>
+                  <td><textarea id="awg_geo_entries_direct" class="form_input" rows="3" cols="60"
+                                placeholder="(used by vpn_except_geo policy)"></textarea></td></tr>
             </table>
+          </fieldset>
+
+          <!-- ============ GeoIP / GeoSite (Module 5) ============ -->
+          <fieldset>
+            <legend>GeoIP / GeoSite (auto-sync from v2fly)</legend>
+            <p>Pick a mode per category: <strong>off</strong> (disabled), <strong>vpn</strong>
+               (target is routed via VPN), <strong>direct</strong> (target bypasses VPN — use with
+               <code>vpn_except_geo</code> policy).</p>
+            <table id="awg-geo-table" class="FormTable awg-geo-table" width="100%">
+              <thead><tr><th>Category</th><th>Mode</th></tr></thead>
+              <tbody></tbody>
+            </table>
+            <table class="FormTable" width="100%">
+              <tr><th>Custom categories (comma-separated v2fly names)</th>
+                  <td><input type="text" id="awg_geo_categories_custom" class="form_input"
+                             size="40" placeholder="e.g. vk,ok,custom-list"></td></tr>
+              <tr><th>Parallel fetches (1-8)</th>
+                  <td><input type="text" id="awg_geo_sync_parallel" class="form_input"
+                             size="4" placeholder="3"></td></tr>
+              <tr><th>Sync schedule (cron)</th>
+                  <td>Weekday <input type="text" id="awg_geo_sync_weekday" class="form_input"
+                                     size="2" placeholder="0"> (0=Sun)
+                      Hour <input type="text" id="awg_geo_sync_hour" class="form_input"
+                                  size="4" placeholder="4"></td></tr>
+            </table>
+            <p>
+              <button type="button" id="awg-geo-sync-btn" class="form_button">Sync now</button>
+              <span id="awg-geo-status" class="awg-geo-status">(status pending)</span>
+            </p>
           </fieldset>
 
           <!-- ============ Security ============ -->

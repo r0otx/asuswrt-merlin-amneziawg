@@ -467,6 +467,12 @@
             var logTail = AWG.util.$('awg-log-tail');
             if (logTail) logTail.textContent = status.daemon_log_tail || '(no log entries)';
 
+            // Geo status (Module 5)
+            var geoStatusEl = AWG.util.$('awg-geo-status');
+            if (geoStatusEl && AWG.geo && AWG.geo.renderStatus) {
+                AWG.geo.renderStatus(geoStatusEl, status.geo);
+            }
+
             // Leases — update DHCP picker only on change
             var leasesKey = _leasesKey(status.leases);
             if (leasesKey !== _lastLeasesKey) {
@@ -1021,6 +1027,28 @@
             for (var i = 0; i < inputs.length; i++) {
                 inputs[i].addEventListener('change', AWG.config.markDirty);
                 inputs[i].addEventListener('input',  AWG.config.markDirty);
+            }
+
+            // 3b. GeoIP fieldset (Module 5)
+            var geoTbody = document.querySelector('#awg-geo-table tbody');
+            if (geoTbody && AWG.geo && AWG.geo.renderAll) {
+                AWG.geo.renderAll(geoTbody, cs);
+                var geoInputs = geoTbody.querySelectorAll('select');
+                for (var gi = 0; gi < geoInputs.length; gi++) {
+                    geoInputs[gi].addEventListener('change', AWG.config.markDirty);
+                }
+            }
+            var geoBtn = document.getElementById('awg-geo-sync-btn');
+            var geoStatus = document.getElementById('awg-geo-status');
+            if (geoBtn && geoStatus) {
+                geoBtn.addEventListener('click', function () {
+                    geoBtn.disabled = true;
+                    geoStatus.textContent = 'syncing…';
+                    AWG.geo.syncNow(function (ok, err) {
+                        geoBtn.disabled = false;
+                        geoStatus.textContent = ok ? 'sync started' : ('error: ' + (err || 'unknown'));
+                    });
+                });
             }
 
             // 4. Start polling

@@ -120,3 +120,9 @@
   text-align: right;
 }
 .awg-actions .button_gen { margin-left: 8px; }
+
+/* ---------- GeoIP table (Module 5) ---------- */
+.awg-geo-table { border-collapse: collapse; margin-top: 4px; }
+.awg-geo-table th, .awg-geo-table td { padding: 2px 8px; }
+.awg-geo-table .awg-geo-mode { padding: 1px 4px; }
+.awg-geo-status { margin-left: 12px; color: #9ab; font-size: 0.9em; }
