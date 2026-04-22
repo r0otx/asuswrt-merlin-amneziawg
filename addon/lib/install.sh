@@ -24,6 +24,22 @@ install_run() {
     ui_mount
     log_info "install_run: installing cron watchdog"
     _install_cron
+
+    log_info "install_run: initialising geo state"
+    _geo_root="${AMNEZIAWG_GEO_ROOT:-/opt/etc/amneziawg/geo}"
+    mkdir -p "${_geo_root}/ip" "${_geo_root}/domain" "${_geo_root}/dnsmasq.d"
+    _src="${AWG_ADDON_DIR:-/jffs/addons/amneziawg}/etc/amneziawg/sources.env"
+    if [ -f "${_src}" ] && [ ! -f "${_geo_root}/sources.env" ]; then
+        cp "${_src}" "${_geo_root}/sources.env"
+    fi
+
+    log_info "install_run: registering geo sync cron"
+    if command -v geo_cron_install >/dev/null 2>&1; then
+        geo_cron_install || log_warn "install_run: geo_cron_install failed"
+    else
+        log_warn "install_run: geo.sh not sourced, skipping geo cron registration"
+    fi
+
     log_info "install_run: migrating from v1 (if present)"
     migrate_from_v1 || true
     log_info "install complete"
@@ -35,6 +51,10 @@ uninstall_run() {
     log_info "uninstall_run: stopping tunnel"
     if command -v tunnel_stop >/dev/null 2>&1; then
         tunnel_stop || true
+    fi
+    log_info "uninstall_run: removing geo sync cron"
+    if command -v geo_cron_remove >/dev/null 2>&1; then
+        geo_cron_remove
     fi
     log_info "uninstall_run: removing cron"
     _uninstall_cron
