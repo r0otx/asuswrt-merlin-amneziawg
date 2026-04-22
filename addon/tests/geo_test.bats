@@ -200,3 +200,74 @@ teardown() { rm -rf "${TMPDIR_TEST}"; }
     [ "$status" -eq 0 ]
     grep -q 'another sync holds lock' "${AMNEZIAWG_LOG_FILE}"
 }
+
+@test "geo_categories prints curated + enabled custom" {
+    state_set "awg_geo_categories_custom" "custom-a,custom-b"
+    run geo_categories
+    [ "$status" -eq 0 ]
+    echo "$output" | grep -q '^google$'
+    echo "$output" | grep -q '^custom-a$'
+    echo "$output" | grep -q '^custom-b$'
+    # All 16 curated must appear
+    [ "$(echo "$output" | wc -l | tr -d ' ')" = "18" ]
+}
+
+@test "geo_list with arg prints ip+domain for that cat" {
+    mkdir -p "${AMNEZIAWG_GEO_ROOT}/ip" "${AMNEZIAWG_GEO_ROOT}/domain"
+    printf '1.2.3.0/24\n'  > "${AMNEZIAWG_GEO_ROOT}/ip/foo.txt"
+    printf 'foo.com\n'     > "${AMNEZIAWG_GEO_ROOT}/domain/foo.txt"
+    run geo_list foo
+    [ "$status" -eq 0 ]
+    echo "$output" | grep -q '1.2.3.0/24'
+    echo "$output" | grep -q 'foo.com'
+}
+
+@test "geo_list (no arg) prints enabled cats one per line" {
+    state_set "awg_geo_google_mode" "vpn"
+    state_set "awg_geo_ru_mode" "direct"
+    run geo_list
+    [ "$status" -eq 0 ]
+    echo "$output" | grep -q '^google$'
+    echo "$output" | grep -q '^ru$'
+}
+
+@test "geo_status emits JSON with last_sync, enabled, errors" {
+    state_set "awg_geo_google_mode" "vpn"
+    printf '1729550000\n' > "${AMNEZIAWG_GEO_ROOT}/last-sync"
+    printf '1729550001 ru\n' > "${AMNEZIAWG_GEO_ROOT}/fetch-errors.log"
+    run geo_status
+    [ "$status" -eq 0 ]
+    echo "$output" | grep -q '"last_sync":1729550000'
+    echo "$output" | grep -q '"enabled":\["google"\]'
+    echo "$output" | grep -q '"errors":\["ru"\]'
+}
+
+@test "geo_status emits sane JSON when no state yet" {
+    run geo_status
+    [ "$status" -eq 0 ]
+    echo "$output" | grep -q '"last_sync":0'
+    echo "$output" | grep -q '"enabled":\[\]'
+    echo "$output" | grep -q '"errors":\[\]'
+}
+
+@test "geo_clear --all removes all category files + flushes ipsets" {
+    mkdir -p "${AMNEZIAWG_GEO_ROOT}/ip" "${AMNEZIAWG_GEO_ROOT}/domain" "${AMNEZIAWG_GEO_ROOT}/dnsmasq.d"
+    touch "${AMNEZIAWG_GEO_ROOT}/ip/google.txt"
+    touch "${AMNEZIAWG_GEO_ROOT}/domain/google.txt"
+    touch "${AMNEZIAWG_GEO_ROOT}/dnsmasq.d/google.conf"
+    run geo_clear --all
+    [ "$status" -eq 0 ]
+    [ ! -f "${AMNEZIAWG_GEO_ROOT}/ip/google.txt" ]
+    [ ! -f "${AMNEZIAWG_GEO_ROOT}/domain/google.txt" ]
+    [ ! -f "${AMNEZIAWG_GEO_ROOT}/dnsmasq.d/google.conf" ]
+}
+
+@test "geo_clear <cat> removes only that category" {
+    mkdir -p "${AMNEZIAWG_GEO_ROOT}/ip" "${AMNEZIAWG_GEO_ROOT}/domain" "${AMNEZIAWG_GEO_ROOT}/dnsmasq.d"
+    touch "${AMNEZIAWG_GEO_ROOT}/ip/google.txt"
+    touch "${AMNEZIAWG_GEO_ROOT}/ip/ru.txt"
+    run geo_clear google
+    [ "$status" -eq 0 ]
+    [ ! -f "${AMNEZIAWG_GEO_ROOT}/ip/google.txt" ]
+    [ -f "${AMNEZIAWG_GEO_ROOT}/ip/ru.txt" ]
+}

@@ -158,8 +158,6 @@ geo_sync() {
     if ! geo_lock_acquire; then
         return 0
     fi
-    # shellcheck disable=SC2064
-    trap "geo_lock_release" EXIT INT TERM
 
     geo_sources_load
 
@@ -171,7 +169,6 @@ geo_sync() {
         _geo_ipsets_rebuild
         date +%s > "${AMNEZIAWG_GEO_ROOT}/last-sync"
         geo_lock_release
-        trap - EXIT INT TERM
         return 0
     fi
 
@@ -182,6 +179,8 @@ geo_sync() {
     _stg="${TMPDIR:-/tmp}/amneziawg-geo-staging.$$"
     rm -rf "${_stg}"
     mkdir -p "${_stg}/ip" "${_stg}/domain" "${_stg}/dnsmasq.d"
+    # shellcheck disable=SC2064
+    trap "geo_lock_release; rm -rf \"${_stg}\"" EXIT INT TERM
     mkdir -p "${AMNEZIAWG_GEO_ROOT}/ip" \
              "${AMNEZIAWG_GEO_ROOT}/domain" \
              "${AMNEZIAWG_GEO_ROOT}/dnsmasq.d"
@@ -304,10 +303,81 @@ _geo_ipsets_rebuild() {
     rm -f "${_tmp}"
 }
 
-# -------- Stubs filled in later tasks (list/clear/status/cron) ----------
-geo_list()         { log_warn "geo_list: not implemented (Task 11)"; return 1; }
-geo_categories()   { log_warn "geo_categories: not implemented (Task 11)"; return 1; }
-geo_status()       { log_warn "geo_status: not implemented (Task 11)"; return 1; }
-geo_clear()        { log_warn "geo_clear: not implemented (Task 11)"; return 1; }
+# -------- geo_categories / geo_list / geo_status / geo_clear -----------
+
+geo_categories() {
+    for _cat in ${GEO_CURATED}; do
+        printf '%s\n' "${_cat}"
+    done
+    _custom="$(state_get awg_geo_categories_custom | tr ',' ' ')"
+    for _cat in ${_custom}; do
+        [ -n "${_cat}" ] && printf '%s\n' "${_cat}"
+    done
+}
+
+geo_list() {
+    _cat="$1"
+    if [ -z "${_cat}" ]; then
+        geo_enabled_categories | tr ' ' '\n'
+        return 0
+    fi
+    _ip_file="${AMNEZIAWG_GEO_ROOT}/ip/${_cat}.txt"
+    _dom_file="${AMNEZIAWG_GEO_ROOT}/domain/${_cat}.txt"
+    [ -s "${_ip_file}" ]  && cat "${_ip_file}"
+    [ -s "${_dom_file}" ] && cat "${_dom_file}"
+    return 0
+}
+
+geo_status() {
+    _ls=0
+    if [ -f "${AMNEZIAWG_GEO_ROOT}/last-sync" ]; then
+        _ls="$(cat "${AMNEZIAWG_GEO_ROOT}/last-sync" 2>/dev/null)"
+        [ -z "${_ls}" ] && _ls=0
+    fi
+    _enabled_csv=""
+    for _cat in $(geo_enabled_categories); do
+        if [ -z "${_enabled_csv}" ]; then
+            _enabled_csv="\"${_cat}\""
+        else
+            _enabled_csv="${_enabled_csv},\"${_cat}\""
+        fi
+    done
+    _errs_csv=""
+    if [ -f "${AMNEZIAWG_GEO_ROOT}/fetch-errors.log" ]; then
+        while IFS=' ' read -r _ts _c; do
+            [ -n "${_c}" ] || continue
+            if [ -z "${_errs_csv}" ]; then
+                _errs_csv="\"${_c}\""
+            else
+                _errs_csv="${_errs_csv},\"${_c}\""
+            fi
+        done < "${AMNEZIAWG_GEO_ROOT}/fetch-errors.log"
+    fi
+    printf '{"last_sync":%s,"enabled":[%s],"errors":[%s]}\n' \
+        "${_ls}" "${_enabled_csv}" "${_errs_csv}"
+}
+
+geo_clear() {
+    _target="$1"
+    if [ "${_target}" = "--all" ] || [ -z "${_target}" ]; then
+        rm -f "${AMNEZIAWG_GEO_ROOT}/ip/"*.txt          2>/dev/null || true
+        rm -f "${AMNEZIAWG_GEO_ROOT}/domain/"*.txt      2>/dev/null || true
+        rm -f "${AMNEZIAWG_GEO_ROOT}/dnsmasq.d/"*.conf  2>/dev/null || true
+        rm -f "${AMNEZIAWG_GEO_ROOT}/last-sync" \
+              "${AMNEZIAWG_GEO_ROOT}/fetch-errors.log" \
+              "${AMNEZIAWG_GEO_ROOT}/.dnsmasq-hash" 2>/dev/null || true
+        {
+            printf 'flush %s\n' "${GEO_IPSET_VPN}"
+            printf 'flush %s\n' "${GEO_IPSET_DIRECT}"
+        } | ipset restore -! 2>/dev/null || true
+    else
+        rm -f "${AMNEZIAWG_GEO_ROOT}/ip/${_target}.txt" \
+              "${AMNEZIAWG_GEO_ROOT}/domain/${_target}.txt" \
+              "${AMNEZIAWG_GEO_ROOT}/dnsmasq.d/${_target}.conf"
+    fi
+    return 0
+}
+
+# -------- Stubs for Task 12 (cron) --------------------------------------
 geo_cron_install() { log_warn "geo_cron_install: not implemented (Task 12)"; return 1; }
 geo_cron_remove()  { log_warn "geo_cron_remove: not implemented (Task 12)"; return 1; }
