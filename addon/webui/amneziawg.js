@@ -517,6 +517,142 @@
         };
     })();
 
+    // ---------- AWG.metrics ----------
+
+    AWG.metrics = (function () {
+        var WIDTH  = 600;
+        var HEIGHT = 80;
+        var POLL_MS_DEFAULT = 60000;
+
+        function parseJsonl(text) {
+            if (!text) return [];
+            var lines = String(text).split('\n');
+            var out = [];
+            for (var i = 0; i < lines.length; i++) {
+                var l = lines[i].trim();
+                if (!l) continue;
+                try { out.push(JSON.parse(l)); } catch (_e) { /* skip */ }
+            }
+            return out;
+        }
+
+        function buildPath(points, key) {
+            if (!points || !points.length) return 'M 0,' + HEIGHT;
+            var max = 1;
+            for (var i = 0; i < points.length; i++) {
+                var v = points[i][key];
+                if (typeof v === 'number' && v > max) max = v;
+            }
+            var step = WIDTH / Math.max(1, points.length - 1);
+            var d = '';
+            for (var j = 0; j < points.length; j++) {
+                var raw = points[j][key];
+                var val = (typeof raw === 'number') ? raw : 0;
+                var x = Math.round(j * step * 100) / 100;
+                var y = Math.round((HEIGHT - (val / max) * HEIGHT) * 100) / 100;
+                d += (j === 0 ? 'M ' : ' L ') + x + ',' + y;
+            }
+            return d;
+        }
+
+        function buildDowntimeRects(points) {
+            var rects = [];
+            if (!points || !points.length) return rects;
+            var step = WIDTH / Math.max(1, points.length - 1);
+            var i = 0;
+            while (i < points.length) {
+                if (points[i].up === 0) {
+                    var start = i;
+                    while (i < points.length && points[i].up === 0) i++;
+                    var end = i - 1;
+                    rects.push({
+                        x: Math.round(start * step * 100) / 100,
+                        width: Math.round((end - start + 1) * step * 100) / 100
+                    });
+                } else {
+                    i++;
+                }
+            }
+            return rects;
+        }
+
+        // DOM-side helpers — not unit-tested (require a live document).
+        function renderSparkline(container, points, key) {
+            if (!container) return;
+            var svgNs = 'http://www.w3.org/2000/svg';
+            while (container.firstChild) container.removeChild(container.firstChild);
+            var svg = document.createElementNS(svgNs, 'svg');
+            svg.setAttribute('viewBox', '0 0 ' + WIDTH + ' ' + HEIGHT);
+            svg.setAttribute('preserveAspectRatio', 'none');
+            svg.setAttribute('class', 'awg-spark');
+
+            var gDown = document.createElementNS(svgNs, 'g');
+            gDown.setAttribute('class', 'awg-spark-downtime');
+            var rects = buildDowntimeRects(points);
+            for (var i = 0; i < rects.length; i++) {
+                var r = document.createElementNS(svgNs, 'rect');
+                r.setAttribute('x', String(rects[i].x));
+                r.setAttribute('y', '0');
+                r.setAttribute('width', String(rects[i].width));
+                r.setAttribute('height', String(HEIGHT));
+                gDown.appendChild(r);
+            }
+            svg.appendChild(gDown);
+
+            var path = document.createElementNS(svgNs, 'path');
+            path.setAttribute('class', 'awg-spark-line');
+            path.setAttribute('d', buildPath(points, key));
+            svg.appendChild(path);
+
+            var max = 0, last = 0;
+            for (var j = 0; j < points.length; j++) {
+                var v = points[j][key];
+                if (typeof v !== 'number') continue;
+                if (v > max) max = v;
+                last = v;
+            }
+            var tMax = document.createElementNS(svgNs, 'text');
+            tMax.setAttribute('class', 'awg-spark-label-max');
+            tMax.setAttribute('x', '4'); tMax.setAttribute('y', '12');
+            tMax.textContent = 'max ' + AWG.util.humanizeBytes(max) + '/s';
+            svg.appendChild(tMax);
+            var tLast = document.createElementNS(svgNs, 'text');
+            tLast.setAttribute('class', 'awg-spark-label-last');
+            tLast.setAttribute('x', String(WIDTH - 4));
+            tLast.setAttribute('y', '12');
+            tLast.setAttribute('text-anchor', 'end');
+            tLast.textContent = 'now ' + AWG.util.humanizeBytes(last) + '/s';
+            svg.appendChild(tLast);
+
+            container.appendChild(svg);
+        }
+
+        function poll(intervalMs) {
+            var ms = intervalMs || POLL_MS_DEFAULT;
+            function tick() {
+                fetch('/user/awg_metrics.htm', { cache: 'no-store' })
+                    .then(function (r) { return r.text(); })
+                    .then(function (txt) {
+                        var pts = parseJsonl(txt);
+                        renderSparkline(document.getElementById('awg-metrics-rx'), pts, 'rx_bps');
+                        renderSparkline(document.getElementById('awg-metrics-tx'), pts, 'tx_bps');
+                        renderSparkline(document.getElementById('awg-metrics-hs'), pts, 'hs');
+                    })
+                    .catch(function () { /* ignore transient fetch errors */ });
+            }
+            tick();
+            setInterval(tick, ms);
+        }
+
+        return {
+            parseJsonl: parseJsonl,
+            buildPath: buildPath,
+            buildDowntimeRects: buildDowntimeRects,
+            renderSparkline: renderSparkline,
+            poll: poll
+        };
+    })();
+
 
     // ---------- AWG.pbr ----------
 
