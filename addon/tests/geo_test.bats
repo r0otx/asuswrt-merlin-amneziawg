@@ -12,6 +12,14 @@ setup() {
     mkdir -p "${AMNEZIAWG_RUNTIME}" "${AMNEZIAWG_GEO_ROOT}"
     : > "${AMNEZIAWG_CUSTOM_SETTINGS}"
 
+    # Mock curl
+    mkdir -p "${TMPDIR_TEST}/bin"
+    cp "${BATS_TEST_DIRNAME}/fixtures/mock_curl.sh" "${TMPDIR_TEST}/bin/curl"
+    chmod +x "${TMPDIR_TEST}/bin/curl"
+    export PATH="${TMPDIR_TEST}/bin:${PATH}"
+    export MOCK_CURL_FIXTURES_DIR="${BATS_TEST_DIRNAME}/fixtures/v2fly"
+    export MOCK_CURL_LOG="${TMPDIR_TEST}/curl.log"
+
     . "${BATS_TEST_DIRNAME}/../lib/log.sh"
     . "${BATS_TEST_DIRNAME}/../lib/state.sh"
     . "${BATS_TEST_DIRNAME}/../lib/geo_parse.sh"
@@ -85,4 +93,44 @@ teardown() { rm -rf "${TMPDIR_TEST}"; }
     state_set "awg_geo_ru_mode" "direct"
     result="$(geo_category_mode "ru")"
     [ "${result}" = "direct" ]
+}
+
+@test "_geo_fetch_category downloads ip+domain and emits dnsmasq.conf (mode=vpn → awg_geo_dst)" {
+    state_set "awg_geo_google_mode" "vpn"
+    mkdir -p "${TMPDIR_TEST}/staging/ip" "${TMPDIR_TEST}/staging/domain" "${TMPDIR_TEST}/staging/dnsmasq.d"
+    geo_sources_load
+    run _geo_fetch_category "google" "${TMPDIR_TEST}/staging"
+    [ "$status" -eq 0 ]
+    [ -s "${TMPDIR_TEST}/staging/ip/google.txt" ]
+    [ -s "${TMPDIR_TEST}/staging/domain/google.txt" ]
+    [ -s "${TMPDIR_TEST}/staging/dnsmasq.d/google.conf" ]
+    grep -q 'ipset=/.*/awg_geo_dst$' "${TMPDIR_TEST}/staging/dnsmasq.d/google.conf"
+    grep -q 'google.com' "${TMPDIR_TEST}/staging/dnsmasq.d/google.conf"
+}
+
+@test "_geo_fetch_category routes mode=direct content into awg_geo_direct" {
+    state_set "awg_geo_ru_mode" "direct"
+    mkdir -p "${TMPDIR_TEST}/staging/ip" "${TMPDIR_TEST}/staging/domain" "${TMPDIR_TEST}/staging/dnsmasq.d"
+    geo_sources_load
+    run _geo_fetch_category "ru" "${TMPDIR_TEST}/staging"
+    [ "$status" -eq 0 ]
+    grep -q 'ipset=/.*/awg_geo_direct$' "${TMPDIR_TEST}/staging/dnsmasq.d/ru.conf"
+}
+
+@test "_geo_fetch_category returns non-zero and logs on HTTP failure" {
+    export MOCK_CURL_FAIL_URLS="/google\.txt$"
+    export MOCK_CURL_FAIL_RC=22
+    state_set "awg_geo_google_mode" "vpn"
+    mkdir -p "${TMPDIR_TEST}/staging/ip" "${TMPDIR_TEST}/staging/domain" "${TMPDIR_TEST}/staging/dnsmasq.d"
+    geo_sources_load
+    run _geo_fetch_category "google" "${TMPDIR_TEST}/staging"
+    [ "$status" -ne 0 ]
+}
+
+@test "_geo_fetch_category skips off category" {
+    state_set "awg_geo_google_mode" "off"
+    mkdir -p "${TMPDIR_TEST}/staging/ip" "${TMPDIR_TEST}/staging/domain" "${TMPDIR_TEST}/staging/dnsmasq.d"
+    geo_sources_load
+    run _geo_fetch_category "google" "${TMPDIR_TEST}/staging"
+    [ "$status" -ne 0 ]
 }

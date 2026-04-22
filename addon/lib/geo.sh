@@ -92,6 +92,63 @@ geo_category_mode() {
     printf '%s' "${_m}"
 }
 
+# -------- Fetch one category into a staging dir ------------------------
+
+_geo_fetch_category() {
+    # Args: <category> <staging_root>
+    # Preconditions: geo_sources_load has been called.
+    # Effect: writes <staging>/ip/<cat>.txt, <staging>/domain/<cat>.txt,
+    #         <staging>/dnsmasq.d/<cat>.conf. Returns non-zero on failure.
+    _cat="$1"; _stg="$2"
+    _mode="$(geo_category_mode "${_cat}")"
+    if [ "${_mode}" = "off" ]; then
+        log_warn "geo: _geo_fetch_category called for off category ${_cat}"
+        return 1
+    fi
+    if [ "${_mode}" = "direct" ]; then
+        _set="${GEO_IPSET_DIRECT}"
+    else
+        _set="${GEO_IPSET_VPN}"
+    fi
+
+    _ip_url="${V2FLY_GEOIP_URL_BASE}/${_cat}.txt"
+    _dom_url="${V2FLY_DOMAIN_URL_BASE}/${_cat}"
+    _ip_out="${_stg}/ip/${_cat}.txt"
+    _dom_raw="${_stg}/domain/${_cat}.raw"
+    _dom_out="${_stg}/domain/${_cat}.txt"
+    _conf_out="${_stg}/dnsmasq.d/${_cat}.conf"
+
+    # IP list (required)
+    if ! curl --proto '=https' -fsSL --max-time "${FETCH_TIMEOUT:-60}" --retry "${FETCH_RETRIES:-2}" \
+            -o "${_ip_out}" "${_ip_url}"; then
+        log_warn "geo: fetch ip failed for ${_cat} (${_ip_url})"
+        return 1
+    fi
+
+    # Domain list (optional: some categories are IP-only)
+    if curl --proto '=https' -fsSL --max-time "${FETCH_TIMEOUT:-60}" --retry "${FETCH_RETRIES:-2}" \
+            -o "${_dom_raw}" "${_dom_url}" 2>/dev/null; then
+        _src_dir="$(dirname "${_dom_raw}")"
+        # Copy raw to a name that matches include: target resolution convention
+        cp "${_dom_raw}" "${_src_dir}/${_cat}"
+        geo_filter_domain < "${_src_dir}/${_cat}" | \
+            geo_resolve_includes "${_src_dir}" 3 "${_cat}" > "${_dom_out}"
+        rm -f "${_dom_raw}" "${_src_dir}/${_cat}"
+    else
+        : > "${_dom_out}"
+    fi
+
+    # dnsmasq.d/<cat>.conf — one `ipset=/<domain>/<set>` per domain
+    : > "${_conf_out}"
+    if [ -s "${_dom_out}" ]; then
+        while IFS= read -r _dom; do
+            [ -n "${_dom}" ] || continue
+            printf 'ipset=/%s/%s\n' "${_dom}" "${_set}" >> "${_conf_out}"
+        done < "${_dom_out}"
+    fi
+    return 0
+}
+
 # -------- Stubs filled in later tasks (sync/list/clear/status/cron) -----
 geo_sync()         { log_warn "geo_sync: not implemented (Task 10)"; return 1; }
 geo_list()         { log_warn "geo_list: not implemented (Task 11)"; return 1; }
