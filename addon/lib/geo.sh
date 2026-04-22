@@ -382,6 +382,24 @@ geo_clear() {
     return 0
 }
 
-# -------- Stubs for Task 12 (cron) --------------------------------------
-geo_cron_install() { log_warn "geo_cron_install: not implemented (Task 12)"; return 1; }
-geo_cron_remove()  { log_warn "geo_cron_remove: not implemented (Task 12)"; return 1; }
+# -------- Cron management via cru (Task 12) -----------------------------
+
+geo_cron_install() {
+    _wd="$(state_get awg_geo_sync_weekday)"
+    _hr="$(state_get awg_geo_sync_hour)"
+    [ -z "${_wd}" ] && _wd=0
+    [ -z "${_hr}" ] && _hr=4
+    if command -v cru >/dev/null 2>&1; then
+        cru a "${AMNEZIAWG_GEO_CRON_ID}" "0 ${_hr} * * ${_wd} ${AMNEZIAWG_GEO_CRON_CMD}"
+    else
+        log_warn "geo_cron_install: cru unavailable (not on Merlin?)"
+        return 1
+    fi
+}
+
+geo_cron_remove() {
+    if command -v cru >/dev/null 2>&1; then
+        cru d "${AMNEZIAWG_GEO_CRON_ID}" 2>/dev/null || true
+    fi
+    return 0
+}

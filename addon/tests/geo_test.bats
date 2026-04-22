@@ -20,6 +20,10 @@ setup() {
     export MOCK_CURL_FIXTURES_DIR="${BATS_TEST_DIRNAME}/fixtures/v2fly"
     export MOCK_CURL_LOG="${TMPDIR_TEST}/curl.log"
 
+    cp "${BATS_TEST_DIRNAME}/fixtures/mock_cru.sh" "${TMPDIR_TEST}/bin/cru"
+    chmod +x "${TMPDIR_TEST}/bin/cru"
+    export MOCK_CRU_LOG="${TMPDIR_TEST}/cru.log"
+
     # Mock ipset + iptables (for ipset rebuild)
     cp "${BATS_TEST_DIRNAME}/fixtures/mock_ipset.sh"    "${TMPDIR_TEST}/bin/mock_ipset.sh"
     cp "${BATS_TEST_DIRNAME}/fixtures/mock_iptables.sh" "${TMPDIR_TEST}/bin/mock_iptables.sh"
@@ -278,4 +282,25 @@ teardown() { rm -rf "${TMPDIR_TEST}"; }
     run geo_clear
     [ "$status" -ne 0 ]
     [ -f "${AMNEZIAWG_GEO_ROOT}/ip/google.txt" ]
+}
+
+@test "geo_cron_install registers cron with cru using state schedule" {
+    state_set "awg_geo_sync_weekday" "1"
+    state_set "awg_geo_sync_hour" "5"
+    run geo_cron_install
+    [ "$status" -eq 0 ]
+    # cru syntax: cru a <id> "<min> <hour> <dom> <mon> <dow> <cmd>"
+    grep -q "^a ${AMNEZIAWG_GEO_CRON_ID} 0 5 \* \* 1 ${AMNEZIAWG_GEO_CRON_CMD}$" "${MOCK_CRU_LOG}"
+}
+
+@test "geo_cron_install uses defaults when state unset (Sun 04:00)" {
+    run geo_cron_install
+    [ "$status" -eq 0 ]
+    grep -q "^a ${AMNEZIAWG_GEO_CRON_ID} 0 4 \* \* 0 ${AMNEZIAWG_GEO_CRON_CMD}$" "${MOCK_CRU_LOG}"
+}
+
+@test "geo_cron_remove calls cru with 'd'" {
+    run geo_cron_remove
+    [ "$status" -eq 0 ]
+    grep -q "^d ${AMNEZIAWG_GEO_CRON_ID}$" "${MOCK_CRU_LOG}"
 }
