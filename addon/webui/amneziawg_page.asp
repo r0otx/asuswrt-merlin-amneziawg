@@ -197,6 +197,21 @@
             </p>
           </fieldset>
 
+          <!-- ============ Traffic history (Module 6) ============ -->
+          <fieldset>
+            <legend>Traffic history (last 24 h)</legend>
+            <p><small>Red zones indicate link-down intervals. Sampled every minute
+               from the watchdog cron. History is tmpfs — reboot clears it.</small></p>
+            <table class="FormTable" width="100%">
+              <tr><th>RX rate</th>
+                  <td><div id="awg-metrics-rx" class="awg-spark-box"></div></td></tr>
+              <tr><th>TX rate</th>
+                  <td><div id="awg-metrics-tx" class="awg-spark-box"></div></td></tr>
+              <tr><th>Handshake age</th>
+                  <td><div id="awg-metrics-hs" class="awg-spark-box"></div></td></tr>
+            </table>
+          </fieldset>
+
           <!-- ============ Security ============ -->
           <fieldset>
             <legend>Security</legend>

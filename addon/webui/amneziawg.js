@@ -1192,6 +1192,11 @@
             if (!(intervalSec >= 1 && intervalSec <= 60)) intervalSec = 5;
             AWG.status.startPolling(intervalSec * 1000);
 
+            // Metrics polling — one tick per minute by default (12× the status interval)
+            if (AWG.metrics && AWG.metrics.poll) {
+                AWG.metrics.poll(intervalSec * 12 * 1000);
+            }
+
             // 5. beforeunload guard
             global.addEventListener('beforeunload', function (e) {
                 if (AWG.config.isDirty()) {

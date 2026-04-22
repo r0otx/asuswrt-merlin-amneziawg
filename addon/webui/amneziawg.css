@@ -126,3 +126,12 @@
 .awg-geo-table th, .awg-geo-table td { padding: 2px 8px; }
 .awg-geo-table .awg-geo-mode { padding: 1px 4px; }
 .awg-geo-status { margin-left: 12px; color: #9ab; font-size: 0.9em; }
+
+/* ---------- Traffic history sparklines (Module 6) ---------- */
+.awg-spark-box { width: 100%; min-height: 80px; }
+.awg-spark { display: block; width: 100%; height: 80px; }
+.awg-spark-line { stroke: #8af; fill: none; stroke-width: 1.5; }
+.awg-spark-downtime rect { fill: #f44; opacity: 0.15; }
+.awg-spark-label-max, .awg-spark-label-last {
+    font-size: 10px; fill: #9ab; font-family: monospace;
+}
