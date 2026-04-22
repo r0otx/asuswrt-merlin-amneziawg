@@ -271,3 +271,11 @@ teardown() { rm -rf "${TMPDIR_TEST}"; }
     [ ! -f "${AMNEZIAWG_GEO_ROOT}/ip/google.txt" ]
     [ -f "${AMNEZIAWG_GEO_ROOT}/ip/ru.txt" ]
 }
+
+@test "geo_clear with no arg returns error (not silent --all)" {
+    mkdir -p "${AMNEZIAWG_GEO_ROOT}/ip"
+    touch "${AMNEZIAWG_GEO_ROOT}/ip/google.txt"
+    run geo_clear
+    [ "$status" -ne 0 ]
+    [ -f "${AMNEZIAWG_GEO_ROOT}/ip/google.txt" ]
+}

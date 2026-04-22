@@ -359,7 +359,11 @@ geo_status() {
 
 geo_clear() {
     _target="$1"
-    if [ "${_target}" = "--all" ] || [ -z "${_target}" ]; then
+    if [ -z "${_target}" ]; then
+        log_warn "geo_clear: argument required (--all or <category>)"
+        return 1
+    fi
+    if [ "${_target}" = "--all" ]; then
         rm -f "${AMNEZIAWG_GEO_ROOT}/ip/"*.txt          2>/dev/null || true
         rm -f "${AMNEZIAWG_GEO_ROOT}/domain/"*.txt      2>/dev/null || true
         rm -f "${AMNEZIAWG_GEO_ROOT}/dnsmasq.d/"*.conf  2>/dev/null || true
