@@ -73,6 +73,37 @@ case "${_op}" in
         _name="$1"; _member="$2"
         grep -qE "^${_name} ${_member}\$" "${_state}"
         exit $? ;;
+    restore)
+        # ipset restore [-!] — read batch commands from stdin
+        while IFS= read -r _line; do
+            [ -z "${_line}" ] && continue
+            set -- ${_line}
+            _rop="$1"; shift
+            case "${_rop}" in
+                create)
+                    _rname="$1"
+                    grep -qE "^SET:${_rname} " "${_state}" || printf 'SET:%s %s\n' "${_rname}" "$2" >> "${_state}"
+                    ;;
+                flush)
+                    _rname="$1"
+                    awk -v n="${_rname}" '$1 != n' "${_state}" > "${_state}.tmp" && mv "${_state}.tmp" "${_state}"
+                    ;;
+                add)
+                    _rname="$1"; _rmember="$2"
+                    grep -qE "^${_rname} ${_rmember}\$" "${_state}" || printf '%s %s\n' "${_rname}" "${_rmember}" >> "${_state}"
+                    ;;
+                destroy)
+                    _rname="$1"
+                    if [ -z "${_rname}" ]; then
+                        : > "${_state}"
+                    else
+                        awk -v n="${_rname}" '!($1 == "SET:"n || $1 == n)' "${_state}" > "${_state}.tmp" \
+                            && mv "${_state}.tmp" "${_state}"
+                    fi
+                    ;;
+            esac
+        done
+        exit 0 ;;
     *)
         exit 0 ;;
 esac

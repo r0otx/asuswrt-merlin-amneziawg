@@ -149,8 +149,162 @@ _geo_fetch_category() {
     return 0
 }
 
-# -------- Stubs filled in later tasks (sync/list/clear/status/cron) -----
-geo_sync()         { log_warn "geo_sync: not implemented (Task 10)"; return 1; }
+# -------- geo_sync: full orchestration ----------------------------------
+
+geo_sync() {
+    _force=0
+    if [ "$1" = "--force" ]; then _force=1; fi
+
+    if ! geo_lock_acquire; then
+        return 0
+    fi
+    # shellcheck disable=SC2064
+    trap "geo_lock_release" EXIT INT TERM
+
+    geo_sources_load
+
+    _enabled="$(geo_enabled_categories)"
+    if [ -z "${_enabled}" ]; then
+        log_info "geo_sync: no enabled categories, clearing caches"
+        _geo_cleanup_disabled ""
+        _geo_dnsmasq_reload_if_changed "${_force}"
+        _geo_ipsets_rebuild
+        date +%s > "${AMNEZIAWG_GEO_ROOT}/last-sync"
+        geo_lock_release
+        trap - EXIT INT TERM
+        return 0
+    fi
+
+    _parallel="$(state_get awg_geo_sync_parallel)"
+    [ -z "${_parallel}" ] && _parallel=3
+    case "${_parallel}" in 1|2|3|4|5|6|7|8) : ;; *) _parallel=3 ;; esac
+
+    _stg="${TMPDIR:-/tmp}/amneziawg-geo-staging.$$"
+    rm -rf "${_stg}"
+    mkdir -p "${_stg}/ip" "${_stg}/domain" "${_stg}/dnsmasq.d"
+    mkdir -p "${AMNEZIAWG_GEO_ROOT}/ip" \
+             "${AMNEZIAWG_GEO_ROOT}/domain" \
+             "${AMNEZIAWG_GEO_ROOT}/dnsmasq.d"
+    : > "${AMNEZIAWG_GEO_ROOT}/fetch-errors.log.tmp"
+
+    # Parallel semaphore: cap concurrent background fetches at _parallel
+    _running=0
+    for _cat in ${_enabled}; do
+        while [ "${_running}" -ge "${_parallel}" ]; do
+            wait
+            _running=0
+        done
+        (
+            if ! _geo_fetch_category "${_cat}" "${_stg}"; then
+                printf '%s %s\n' "$(date +%s)" "${_cat}" \
+                    >> "${AMNEZIAWG_GEO_ROOT}/fetch-errors.log.tmp"
+            fi
+        ) &
+        _running=$(( _running + 1 ))
+    done
+    wait
+
+    # Move successful categories into live root (atomic per-file)
+    for _cat in ${_enabled}; do
+        if [ -s "${_stg}/ip/${_cat}.txt" ]; then
+            mv -f "${_stg}/ip/${_cat}.txt"         "${AMNEZIAWG_GEO_ROOT}/ip/${_cat}.txt"
+            mv -f "${_stg}/domain/${_cat}.txt"     "${AMNEZIAWG_GEO_ROOT}/domain/${_cat}.txt"     2>/dev/null || true
+            mv -f "${_stg}/dnsmasq.d/${_cat}.conf" "${AMNEZIAWG_GEO_ROOT}/dnsmasq.d/${_cat}.conf" 2>/dev/null || true
+        fi
+    done
+
+    _geo_cleanup_disabled "${_enabled}"
+    _geo_dnsmasq_reload_if_changed "${_force}"
+    _geo_ipsets_rebuild
+
+    mv -f "${AMNEZIAWG_GEO_ROOT}/fetch-errors.log.tmp" \
+          "${AMNEZIAWG_GEO_ROOT}/fetch-errors.log"
+    date +%s > "${AMNEZIAWG_GEO_ROOT}/last-sync"
+    rm -rf "${_stg}"
+
+    geo_lock_release
+    trap - EXIT INT TERM
+    return 0
+}
+
+_geo_cleanup_disabled() {
+    _keep="$1"
+    for _f in "${AMNEZIAWG_GEO_ROOT}/ip/"*.txt; do
+        [ -e "${_f}" ] || continue
+        _cat="$(basename "${_f}" .txt)"
+        case " ${_keep} " in
+            *" ${_cat} "*) ;;
+            *)
+                rm -f "${AMNEZIAWG_GEO_ROOT}/ip/${_cat}.txt"
+                rm -f "${AMNEZIAWG_GEO_ROOT}/domain/${_cat}.txt"
+                rm -f "${AMNEZIAWG_GEO_ROOT}/dnsmasq.d/${_cat}.conf"
+                ;;
+        esac
+    done
+}
+
+_geo_dnsmasq_reload_if_changed() {
+    _force="$1"
+    _hash_file="${AMNEZIAWG_GEO_ROOT}/.dnsmasq-hash"
+    _new_hash="$(cat "${AMNEZIAWG_GEO_ROOT}/dnsmasq.d/"*.conf 2>/dev/null | sha1sum | awk '{print $1}')"
+    _old_hash=""
+    [ -f "${_hash_file}" ] && _old_hash="$(cat "${_hash_file}")"
+    if [ "${_force}" = "1" ] || [ "${_new_hash}" != "${_old_hash}" ]; then
+        printf '%s\n' "${_new_hash}" > "${_hash_file}"
+        if command -v service >/dev/null 2>&1; then
+            service restart_dnsmasq >/dev/null 2>&1 || true
+        fi
+    fi
+}
+
+_geo_ipsets_rebuild() {
+    # Destroy and recreate both geo ipsets, populate from ip/*.txt + manual lists.
+    { printf 'destroy %s\n' "${GEO_IPSET_VPN}"
+      printf 'destroy %s\n' "${GEO_IPSET_DIRECT}"
+    } | ipset restore -! 2>/dev/null || true
+
+    _tmp="$(mktemp)"
+    {
+        printf 'create %s hash:net family inet maxelem 65536 -exist\n' "${GEO_IPSET_VPN}"
+        printf 'create %s hash:net family inet maxelem 65536 -exist\n' "${GEO_IPSET_DIRECT}"
+        printf 'flush %s\n' "${GEO_IPSET_VPN}"
+        printf 'flush %s\n' "${GEO_IPSET_DIRECT}"
+
+        # Per-category IPs → route by mode
+        for _f in "${AMNEZIAWG_GEO_ROOT}/ip/"*.txt; do
+            [ -s "${_f}" ] || continue
+            _cat="$(basename "${_f}" .txt)"
+            _m="$(geo_category_mode "${_cat}")"
+            [ "${_m}" = "off" ] && continue
+            _set="${GEO_IPSET_VPN}"
+            [ "${_m}" = "direct" ] && _set="${GEO_IPSET_DIRECT}"
+            while IFS= read -r _cidr; do
+                [ -n "${_cidr}" ] || continue
+                case "${_cidr}" in '#'*) continue ;; esac
+                printf 'add %s %s -exist\n' "${_set}" "${_cidr}"
+            done < "${_f}"
+        done
+
+        # Manual entries
+        _man_vpn="$(state_get awg_geo_entries)"
+        _IFS_save="${IFS}"; IFS=','
+        for _c in ${_man_vpn}; do
+            _c="$(printf '%s' "${_c}" | tr -d ' ')"
+            [ -n "${_c}" ] && printf 'add %s %s -exist\n' "${GEO_IPSET_VPN}" "${_c}"
+        done
+        _man_dir="$(state_get awg_geo_entries_direct)"
+        for _c in ${_man_dir}; do
+            _c="$(printf '%s' "${_c}" | tr -d ' ')"
+            [ -n "${_c}" ] && printf 'add %s %s -exist\n' "${GEO_IPSET_DIRECT}" "${_c}"
+        done
+        IFS="${_IFS_save}"
+    } > "${_tmp}"
+
+    ipset restore -! < "${_tmp}"
+    rm -f "${_tmp}"
+}
+
+# -------- Stubs filled in later tasks (list/clear/status/cron) ----------
 geo_list()         { log_warn "geo_list: not implemented (Task 11)"; return 1; }
 geo_categories()   { log_warn "geo_categories: not implemented (Task 11)"; return 1; }
 geo_status()       { log_warn "geo_status: not implemented (Task 11)"; return 1; }

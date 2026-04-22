@@ -20,10 +20,21 @@ setup() {
     export MOCK_CURL_FIXTURES_DIR="${BATS_TEST_DIRNAME}/fixtures/v2fly"
     export MOCK_CURL_LOG="${TMPDIR_TEST}/curl.log"
 
+    # Mock ipset + iptables (for ipset rebuild)
+    cp "${BATS_TEST_DIRNAME}/fixtures/mock_ipset.sh"    "${TMPDIR_TEST}/bin/mock_ipset.sh"
+    cp "${BATS_TEST_DIRNAME}/fixtures/mock_iptables.sh" "${TMPDIR_TEST}/bin/mock_iptables.sh"
+    . "${TMPDIR_TEST}/bin/mock_ipset.sh"
+    . "${TMPDIR_TEST}/bin/mock_iptables.sh"
+    mock_ipset_install
+    mock_iptables_install
+
     . "${BATS_TEST_DIRNAME}/../lib/log.sh"
     . "${BATS_TEST_DIRNAME}/../lib/state.sh"
     . "${BATS_TEST_DIRNAME}/../lib/geo_parse.sh"
     . "${BATS_TEST_DIRNAME}/../lib/geo.sh"
+
+    # Shadow /sbin/service with a no-op logger
+    service() { printf '%s\n' "$*" >> "${TMPDIR_TEST}/service.log"; }
 
     cat > "${AMNEZIAWG_GEO_ROOT}/sources.env" <<'EOF'
 V2FLY_GEOIP_URL_BASE="https://raw.githubusercontent.com/v2fly/geoip/release/text"
@@ -133,4 +144,59 @@ teardown() { rm -rf "${TMPDIR_TEST}"; }
     geo_sources_load
     run _geo_fetch_category "google" "${TMPDIR_TEST}/staging"
     [ "$status" -ne 0 ]
+}
+
+@test "geo_sync happy path: 2 cats enabled, files land, ipsets populated, timestamp written" {
+    state_set "awg_geo_google_mode" "vpn"
+    state_set "awg_geo_ru_mode" "direct"
+    state_set "awg_geo_sync_parallel" "2"
+    run geo_sync
+    [ "$status" -eq 0 ]
+    [ -s "${AMNEZIAWG_GEO_ROOT}/ip/google.txt" ]
+    [ -s "${AMNEZIAWG_GEO_ROOT}/ip/ru.txt" ]
+    [ -f "${AMNEZIAWG_GEO_ROOT}/last-sync" ]
+    # ipset membership verifies restoration
+    ipset test awg_geo_dst 8.8.8.0/24
+    ipset test awg_geo_direct 5.8.0.0/20
+}
+
+@test "geo_sync partial failure: ru timeout, google still applied" {
+    state_set "awg_geo_google_mode" "vpn"
+    state_set "awg_geo_ru_mode" "direct"
+    export MOCK_CURL_FAIL_URLS="/ru\.txt$"
+    export MOCK_CURL_FAIL_RC=28
+    run geo_sync
+    [ "$status" -eq 0 ]
+    [ -s "${AMNEZIAWG_GEO_ROOT}/ip/google.txt" ]
+    [ ! -f "${AMNEZIAWG_GEO_ROOT}/ip/ru.txt" ]
+    grep -q 'ru' "${AMNEZIAWG_GEO_ROOT}/fetch-errors.log"
+}
+
+@test "geo_sync cleanup: disabling cat removes its files" {
+    state_set "awg_geo_google_mode" "vpn"
+    geo_sync
+    [ -s "${AMNEZIAWG_GEO_ROOT}/ip/google.txt" ]
+    state_set "awg_geo_google_mode" "off"
+    geo_sync
+    [ ! -f "${AMNEZIAWG_GEO_ROOT}/ip/google.txt" ]
+    [ ! -f "${AMNEZIAWG_GEO_ROOT}/dnsmasq.d/google.conf" ]
+}
+
+@test "geo_sync is noop for restart_dnsmasq when dnsmasq.d unchanged" {
+    state_set "awg_geo_google_mode" "vpn"
+    geo_sync
+    _first_count="$(grep -c 'restart_dnsmasq' "${TMPDIR_TEST}/service.log" 2>/dev/null || echo 0)"
+    geo_sync
+    _second_count="$(grep -c 'restart_dnsmasq' "${TMPDIR_TEST}/service.log" 2>/dev/null || echo 0)"
+    [ "${_second_count}" -eq "${_first_count}" ]
+}
+
+@test "geo_sync under lock collision exits rc=0 with note" {
+    # Hold the lock from our own alive bats shell PID
+    mkdir -p "$(dirname "${AMNEZIAWG_GEO_LOCK}")"
+    echo "$$" > "${AMNEZIAWG_GEO_LOCK}"
+    state_set "awg_geo_google_mode" "vpn"
+    run geo_sync
+    [ "$status" -eq 0 ]
+    grep -q 'another sync holds lock' "${AMNEZIAWG_LOG_FILE}"
 }
