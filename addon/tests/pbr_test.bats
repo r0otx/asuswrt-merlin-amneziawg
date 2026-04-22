@@ -245,3 +245,39 @@ _add_device() {
     run state_get "awg_dev_0_ip"
     [ "$output" = "192.168.1.105" ]
 }
+
+@test "pbr_geo_apply creates awg_geo_dst as hash:net" {
+    state_set "awg_geo_entries" "10.0.0.0/8,192.168.1.0/24"
+    pbr_geo_apply
+    grep -qE '^SET:awg_geo_dst hash:net' "${TMPDIR_TEST}/ipset-state"
+    ipset test awg_geo_dst 10.0.0.0/8
+    ipset test awg_geo_dst 192.168.1.0/24
+}
+
+@test "pbr_geo_direct_apply creates awg_geo_direct as hash:net" {
+    state_set "awg_geo_entries_direct" "172.16.0.0/12"
+    pbr_geo_direct_apply
+    grep -qE '^SET:awg_geo_direct hash:net' "${TMPDIR_TEST}/ipset-state"
+    ipset test awg_geo_direct 172.16.0.0/12
+}
+
+@test "pbr_geo_direct_add appends to awg_geo_entries_direct" {
+    pbr_geo_direct_add "10.0.0.0/8"
+    pbr_geo_direct_add "192.168.0.0/16"
+    run state_get "awg_geo_entries_direct"
+    [ "$output" = "10.0.0.0/8,192.168.0.0/16" ]
+}
+
+@test "pbr_geo_direct_remove drops a CIDR" {
+    state_set "awg_geo_entries_direct" "10.0.0.0/8,172.16.0.0/12"
+    pbr_geo_direct_remove "10.0.0.0/8"
+    run state_get "awg_geo_entries_direct"
+    [ "$output" = "172.16.0.0/12" ]
+}
+
+@test "pbr_geo_direct_clear empties awg_geo_entries_direct" {
+    state_set "awg_geo_entries_direct" "10.0.0.0/8"
+    pbr_geo_direct_clear
+    run state_get "awg_geo_entries_direct"
+    [ "$output" = "" ]
+}

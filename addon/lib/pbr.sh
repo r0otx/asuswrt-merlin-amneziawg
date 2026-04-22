@@ -11,7 +11,11 @@
 #   pbr_geo_add <cidr>
 #   pbr_geo_remove <cidr>
 #   pbr_geo_clear
-#   pbr_geo_apply                       # push awg_geo_entries into ipset
+#   pbr_geo_apply                       # push awg_geo_entries into ipset (hash:net)
+#   pbr_geo_direct_add <cidr>
+#   pbr_geo_direct_remove <cidr>
+#   pbr_geo_direct_clear
+#   pbr_geo_direct_apply                # push awg_geo_entries_direct into ipset (hash:net)
 #   pbr_default_set <policy>
 #   pbr_device_set <ip> <policy> [name] [mac]
 #   pbr_device_remove <ip>
@@ -27,6 +31,9 @@ _PBR_TABLE=300
 _PBR_PRIO_DIRECT=97
 _PBR_PRIO_FWMARK=98
 _PBR_PRIO_SOURCE=99
+
+GEO_IPSET_VPN="awg_geo_dst"
+GEO_IPSET_DIRECT="awg_geo_direct"
 
 pbr_load_devices() {
     # Output: N<TAB>ip<TAB>mac<TAB>name<TAB>policy per device; silently skip
@@ -268,16 +275,72 @@ pbr_geo_clear() {
 
 pbr_geo_apply() {
     _list="$(state_get awg_geo_entries)"
+    ipset destroy "${GEO_IPSET_VPN}" 2>/dev/null || true
     _tmp="$(mktemp)"
     {
-        printf 'create awg_geo_dst hash:ip family inet -exist\n'
-        printf 'flush awg_geo_dst\n'
+        printf 'create %s hash:net family inet maxelem 65536 -exist\n' "${GEO_IPSET_VPN}"
+        printf 'flush %s\n' "${GEO_IPSET_VPN}"
         if [ -n "${_list}" ]; then
             _IFS_save="${IFS}"; IFS=','
             for _cidr in ${_list}; do
                 _cidr="$(printf '%s' "${_cidr}" | tr -d ' ')"
                 [ -n "${_cidr}" ] || continue
-                printf 'add awg_geo_dst %s -exist\n' "${_cidr}"
+                printf 'add %s %s -exist\n' "${GEO_IPSET_VPN}" "${_cidr}"
+            done
+            IFS="${_IFS_save}"
+        fi
+    } > "${_tmp}"
+    if command -v ipset-restore >/dev/null 2>&1; then
+        ipset-restore < "${_tmp}"
+    else
+        ipset restore < "${_tmp}"
+    fi
+    rm -f "${_tmp}"
+}
+
+pbr_geo_direct_add() {
+    _cidr="$1"
+    [ -n "${_cidr}" ] || return 1
+    _existing="$(state_get awg_geo_entries_direct)"
+    if [ -z "${_existing}" ]; then
+        state_set "awg_geo_entries_direct" "${_cidr}"
+    else
+        state_set "awg_geo_entries_direct" "${_existing},${_cidr}"
+    fi
+}
+
+pbr_geo_direct_remove() {
+    _cidr="$1"
+    _existing="$(state_get awg_geo_entries_direct)"
+    [ -z "${_existing}" ] && return 0
+    _new=""
+    _IFS_save="${IFS}"; IFS=','
+    for _c in ${_existing}; do
+        _c="$(printf '%s' "${_c}" | tr -d ' ')"
+        [ "${_c}" = "${_cidr}" ] && continue
+        [ -z "${_new}" ] && _new="${_c}" || _new="${_new},${_c}"
+    done
+    IFS="${_IFS_save}"
+    state_set "awg_geo_entries_direct" "${_new}"
+}
+
+pbr_geo_direct_clear() {
+    state_set "awg_geo_entries_direct" ""
+}
+
+pbr_geo_direct_apply() {
+    _list="$(state_get awg_geo_entries_direct)"
+    ipset destroy "${GEO_IPSET_DIRECT}" 2>/dev/null || true
+    _tmp="$(mktemp)"
+    {
+        printf 'create %s hash:net family inet maxelem 65536 -exist\n' "${GEO_IPSET_DIRECT}"
+        printf 'flush %s\n' "${GEO_IPSET_DIRECT}"
+        if [ -n "${_list}" ]; then
+            _IFS_save="${IFS}"; IFS=','
+            for _cidr in ${_list}; do
+                _cidr="$(printf '%s' "${_cidr}" | tr -d ' ')"
+                [ -n "${_cidr}" ] || continue
+                printf 'add %s %s -exist\n' "${GEO_IPSET_DIRECT}" "${_cidr}"
             done
             IFS="${_IFS_save}"
         fi
