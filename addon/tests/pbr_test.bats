@@ -331,3 +331,50 @@ _add_device() {
     pbr_kill_switch_arm
     iptables -S AMNEZIAWG_KILL | grep -q -- '-s 192.168.1.50 -j DROP'
 }
+
+@test "pbr_reapply_incremental re-applies when awg_geo_entries_direct changes" {
+    _add_device 0 192.168.1.50 ff:ff:ff:ff:ff:01 laptop vpn_except_geo
+    pbr_reapply_incremental
+    _sha_before="$(cat "$(_pbr_state_file).sha")"
+
+    state_set "awg_geo_entries_direct" "10.0.0.0/8"
+    pbr_reapply_incremental
+    _sha_after="$(cat "$(_pbr_state_file).sha")"
+
+    [ "${_sha_before}" != "${_sha_after}" ]
+}
+
+@test "pbr_reapply_incremental re-applies when awg_geo_<cat>_mode changes" {
+    _add_device 0 192.168.1.50 ff:ff:ff:ff:ff:01 laptop vpn_geo
+    pbr_reapply_incremental
+    _sha_before="$(cat "$(_pbr_state_file).sha")"
+
+    state_set "awg_geo_ru_mode" "direct"
+    pbr_reapply_incremental
+    _sha_after="$(cat "$(_pbr_state_file).sha")"
+
+    [ "${_sha_before}" != "${_sha_after}" ]
+}
+
+@test "pbr_reapply_incremental re-applies when awg_geo_entries changes" {
+    _add_device 0 192.168.1.50 ff:ff:ff:ff:ff:01 laptop vpn_geo
+    pbr_reapply_incremental
+    _sha_before="$(cat "$(_pbr_state_file).sha")"
+
+    state_set "awg_geo_entries" "10.0.0.0/8"
+    pbr_reapply_incremental
+    _sha_after="$(cat "$(_pbr_state_file).sha")"
+
+    [ "${_sha_before}" != "${_sha_after}" ]
+}
+
+@test "pbr_reapply_incremental is noop when nothing changes" {
+    _add_device 0 192.168.1.50 ff:ff:ff:ff:ff:01 laptop vpn_all
+    pbr_reapply_incremental
+    _sha_before="$(cat "$(_pbr_state_file).sha")"
+
+    pbr_reapply_incremental
+    _sha_after="$(cat "$(_pbr_state_file).sha")"
+
+    [ "${_sha_before}" = "${_sha_after}" ]
+}

@@ -35,6 +35,8 @@ _PBR_PRIO_SOURCE=99
 GEO_IPSET_VPN="awg_geo_dst"
 GEO_IPSET_DIRECT="awg_geo_direct"
 
+GEO_CURATED="google youtube netflix telegram cloudflare github discord twitter meta tiktok cn ru by ua private tor"
+
 pbr_load_devices() {
     # Output: N<TAB>ip<TAB>mac<TAB>name<TAB>policy per device; silently skip
     # entries where ip and policy are absent.
@@ -238,7 +240,19 @@ pbr_kill_switch_disarm() {
 
 pbr_reapply_incremental() {
     mkdir -p "${AMNEZIAWG_RUNTIME}"
-    _current="$(pbr_load_devices | sha1sum | awk '{print $1}')"
+    _hash_input="$(pbr_load_devices)
+$(state_get awg_geo_entries)
+$(state_get awg_geo_entries_direct)
+$(state_get awg_default_policy)
+$(state_get awg_killswitch_strict)
+$(state_get awg_geo_categories_custom)"
+    _custom="$(state_get awg_geo_categories_custom | tr ',' ' ')"
+    for _cat in ${GEO_CURATED} ${_custom}; do
+        [ -z "${_cat}" ] && continue
+        _hash_input="${_hash_input}
+${_cat}:$(state_get "awg_geo_${_cat}_mode")"
+    done
+    _current="$(printf '%s' "${_hash_input}" | sha1sum | awk '{print $1}')"
     _previous=""
     if [ -f "$(_pbr_state_file).sha" ]; then
         _previous="$(cat "$(_pbr_state_file).sha")"
