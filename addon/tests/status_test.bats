@@ -141,3 +141,22 @@ EOF
     status_emit_json
     grep -q '"killswitch_armed":true' "${AMNEZIAWG_RUNTIME}/status.json"
 }
+
+@test "status_emit_json includes geo{} with last_sync and enabled" {
+    export AMNEZIAWG_GEO_ROOT="${TMPDIR_TEST}/geo"
+    mkdir -p "${AMNEZIAWG_GEO_ROOT}"
+    printf '1729550000\n' > "${AMNEZIAWG_GEO_ROOT}/last-sync"
+    state_set "awg_geo_google_mode" "vpn"
+    state_set "awg_geo_ru_mode" "direct"
+    state_set "awg_geo_telegram_mode" "off"
+    status_emit_json
+    grep -q '"geo":{' "${AMNEZIAWG_RUNTIME}/status.json"
+    grep -q '"last_sync":1729550000' "${AMNEZIAWG_RUNTIME}/status.json"
+    grep -q '"enabled":\["google","ru"\]' "${AMNEZIAWG_RUNTIME}/status.json"
+}
+
+@test "status_emit_json emits empty geo{} when no state" {
+    export AMNEZIAWG_GEO_ROOT="${TMPDIR_TEST}/geo"
+    status_emit_json
+    grep -q '"geo":{"last_sync":0,"enabled":\[\]}' "${AMNEZIAWG_RUNTIME}/status.json"
+}

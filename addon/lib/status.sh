@@ -45,6 +45,28 @@ status_emit_json() {
     _killswitch_armed="false"
     [ -f "${AMNEZIAWG_RUNTIME}/killswitch-armed" ] && _killswitch_armed="true"
 
+    # M5 geo status (last_sync + enabled cats)
+    : "${AMNEZIAWG_GEO_ROOT:=/opt/etc/amneziawg/geo}"
+    _geo_last=0
+    if [ -f "${AMNEZIAWG_GEO_ROOT}/last-sync" ]; then
+        _geo_last="$(cat "${AMNEZIAWG_GEO_ROOT}/last-sync" 2>/dev/null)"
+        [ -z "${_geo_last}" ] && _geo_last=0
+    fi
+    _geo_enabled_csv=""
+    _geo_curated="google youtube netflix telegram cloudflare github discord twitter meta tiktok cn ru by ua private tor"
+    _geo_custom="$(state_get awg_geo_categories_custom 2>/dev/null | tr ',' ' ')"
+    for _cat in ${_geo_curated} ${_geo_custom}; do
+        [ -z "${_cat}" ] && continue
+        _m="$(state_get "awg_geo_${_cat}_mode" 2>/dev/null)"
+        if [ -n "${_m}" ] && [ "${_m}" != "off" ]; then
+            if [ -z "${_geo_enabled_csv}" ]; then
+                _geo_enabled_csv="\"${_cat}\""
+            else
+                _geo_enabled_csv="${_geo_enabled_csv},\"${_cat}\""
+            fi
+        fi
+    done
+
     [ "$(state_get awg_enabled 2>/dev/null)" = "1" ] && _enabled="true"
 
     if tunnel_is_up; then
@@ -86,6 +108,7 @@ status_emit_json() {
         printf '"daemon_log_tail":"%s"'       "${_log_tail}"
         printf ',"leases":%s'                 "${_leases_json}"
         printf ',"killswitch_armed":%s'       "${_killswitch_armed}"
+        printf ',"geo":{"last_sync":%s,"enabled":[%s]}' "${_geo_last}" "${_geo_enabled_csv}"
         printf '}\n'
     } > "${_tmp}"
     mv "${_tmp}" "${AMNEZIAWG_RUNTIME}/status.json"
