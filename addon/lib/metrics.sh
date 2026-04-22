@@ -32,7 +32,6 @@ metrics_clear() {
           "${AMNEZIAWG_WWW_USER}/awg_metrics.htm" 2>/dev/null || true
 }
 
-# Implemented in Task 2
 metrics_ring_trim() {
     [ -s "${AMNEZIAWG_METRICS_FILE}" ] || return 0
     _n="$(wc -l < "${AMNEZIAWG_METRICS_FILE}" 2>/dev/null)"
@@ -43,7 +42,7 @@ metrics_ring_trim() {
             && mv -f "${_tmp}" "${AMNEZIAWG_METRICS_FILE}"
     fi
 }
-# Implemented in Task 3
+
 metrics_sample() {
     _ts=$(date +%s)
 
