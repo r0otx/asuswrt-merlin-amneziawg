@@ -1,0 +1,4 @@
+domain:yandex.ru
+domain:mail.ru
+regexp:.*\.sberbank\.ru
+full:vk.com @ad

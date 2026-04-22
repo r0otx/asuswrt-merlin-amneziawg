@@ -1,0 +1,6 @@
+# Comment line
+domain:google.com
+domain:gstatic.com @cn
+full:www.google.com
+regexp:.*\.googleapis\.com
+include:youtube
