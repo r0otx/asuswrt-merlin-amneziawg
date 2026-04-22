@@ -172,7 +172,7 @@ pbr_apply() {
                 ;;
             vpn_geo)
                 iptables -t mangle -A AMNEZIAWG -s "${_ip}" \
-                    -m set --match-set awg_geo_dst dst \
+                    -m set --match-set "${GEO_IPSET_VPN}" dst \
                     -j MARK --set-mark "${_PBR_FWMARK}"
                 ;;
             vpn_except_geo)
@@ -185,7 +185,7 @@ pbr_apply() {
                 # all packets from this IP through table 300 and defeat the
                 # RETURN bypass. Mangle-only, like vpn_geo.
                 iptables -t mangle -A AMNEZIAWG -s "${_ip}" \
-                    -m set --match-set awg_geo_direct dst \
+                    -m set --match-set "${GEO_IPSET_DIRECT}" dst \
                     -j RETURN
                 iptables -t mangle -A AMNEZIAWG -s "${_ip}" \
                     -j MARK --set-mark "${_PBR_FWMARK}"
