@@ -33,6 +33,15 @@ metrics_clear() {
 }
 
 # Implemented in Task 2
-metrics_ring_trim() { log_warn "metrics_ring_trim: not implemented (Task 2)"; return 1; }
+metrics_ring_trim() {
+    [ -s "${AMNEZIAWG_METRICS_FILE}" ] || return 0
+    _n="$(wc -l < "${AMNEZIAWG_METRICS_FILE}" 2>/dev/null)"
+    [ -n "${_n}" ] || return 0
+    if [ "${_n}" -gt "${AMNEZIAWG_METRICS_WINDOW}" ] 2>/dev/null; then
+        _tmp="${AMNEZIAWG_METRICS_FILE}.trim.$$"
+        tail -n "${AMNEZIAWG_METRICS_WINDOW}" "${AMNEZIAWG_METRICS_FILE}" > "${_tmp}" \
+            && mv -f "${_tmp}" "${AMNEZIAWG_METRICS_FILE}"
+    fi
+}
 # Implemented in Task 3
 metrics_sample() { log_warn "metrics_sample: not implemented (Task 3)"; return 1; }

@@ -37,3 +37,26 @@ teardown() { rm -rf "${TMPDIR_TEST}"; }
     [ ! -f "${AMNEZIAWG_METRICS_FILE}" ]
     [ ! -f "${AMNEZIAWG_WWW_USER}/awg_metrics.htm" ]
 }
+
+@test "metrics_ring_trim is a noop when line count <= window" {
+    # Reduce window for test speed
+    export AMNEZIAWG_METRICS_WINDOW=5
+    printf '{"ts":1}\n{"ts":2}\n{"ts":3}\n' > "${AMNEZIAWG_METRICS_FILE}"
+    metrics_ring_trim
+    [ "$(wc -l < "${AMNEZIAWG_METRICS_FILE}" | tr -d ' ')" = "3" ]
+}
+
+@test "metrics_ring_trim keeps only last N lines when oversized" {
+    export AMNEZIAWG_METRICS_WINDOW=3
+    printf '{"ts":1}\n{"ts":2}\n{"ts":3}\n{"ts":4}\n{"ts":5}\n' > "${AMNEZIAWG_METRICS_FILE}"
+    metrics_ring_trim
+    [ "$(wc -l < "${AMNEZIAWG_METRICS_FILE}" | tr -d ' ')" = "3" ]
+    head -1 "${AMNEZIAWG_METRICS_FILE}" | grep -q '"ts":3'
+    tail -1 "${AMNEZIAWG_METRICS_FILE}" | grep -q '"ts":5'
+}
+
+@test "metrics_ring_trim tolerates missing file" {
+    rm -f "${AMNEZIAWG_METRICS_FILE}"
+    run metrics_ring_trim
+    [ "$status" -eq 0 ]
+}
