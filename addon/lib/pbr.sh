@@ -74,6 +74,24 @@ _pbr_resolve_ip() {
 
 _pbr_state_file() { printf '%s\n' "${AMNEZIAWG_RUNTIME}/pbr-applied-rules"; }
 
+# Single source of truth for the reapply hash.
+# Must include ALL state that, when changed, requires a full teardown+setup.
+_pbr_state_hash() {
+    _hash_input="$(pbr_load_devices)
+$(state_get awg_geo_entries)
+$(state_get awg_geo_entries_direct)
+$(state_get awg_default_policy)
+$(state_get awg_killswitch_strict)
+$(state_get awg_geo_categories_custom)"
+    _custom="$(state_get awg_geo_categories_custom | tr ',' ' ')"
+    for _cat in ${GEO_CURATED} ${_custom}; do
+        [ -z "${_cat}" ] && continue
+        _hash_input="${_hash_input}
+${_cat}:$(state_get "awg_geo_${_cat}_mode")"
+    done
+    printf '%s' "${_hash_input}" | sha1sum | awk '{print $1}'
+}
+
 pbr_setup() {
     mkdir -p "${AMNEZIAWG_RUNTIME}"
     chain_ensure mangle AMNEZIAWG
@@ -86,7 +104,7 @@ pbr_setup() {
     pbr_apply
     # Save snapshot for incremental compare
     pbr_load_devices > "$(_pbr_state_file)"
-    pbr_load_devices | sha1sum | awk '{print $1}' > "$(_pbr_state_file).sha"
+    _pbr_state_hash > "$(_pbr_state_file).sha"
 }
 
 _pbr_lan_cidr() {
@@ -240,19 +258,7 @@ pbr_kill_switch_disarm() {
 
 pbr_reapply_incremental() {
     mkdir -p "${AMNEZIAWG_RUNTIME}"
-    _hash_input="$(pbr_load_devices)
-$(state_get awg_geo_entries)
-$(state_get awg_geo_entries_direct)
-$(state_get awg_default_policy)
-$(state_get awg_killswitch_strict)
-$(state_get awg_geo_categories_custom)"
-    _custom="$(state_get awg_geo_categories_custom | tr ',' ' ')"
-    for _cat in ${GEO_CURATED} ${_custom}; do
-        [ -z "${_cat}" ] && continue
-        _hash_input="${_hash_input}
-${_cat}:$(state_get "awg_geo_${_cat}_mode")"
-    done
-    _current="$(printf '%s' "${_hash_input}" | sha1sum | awk '{print $1}')"
+    _current="$(_pbr_state_hash)"
     _previous=""
     if [ -f "$(_pbr_state_file).sha" ]; then
         _previous="$(cat "$(_pbr_state_file).sha")"
