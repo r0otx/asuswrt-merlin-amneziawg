@@ -65,3 +65,55 @@ teardown() {
     ! ls "${AMNEZIAWG_CUSTOM_SETTINGS}".tmp 2>/dev/null
     grep -q "^awg_test atomic$" "${AMNEZIAWG_CUSTOM_SETTINGS}"
 }
+
+@test "state_validate_key accepts awg_geo_<cat>_mode with valid enum" {
+    run state_validate_key "awg_geo_ru_mode" "direct"
+    [ "$status" -eq 0 ]
+    run state_validate_key "awg_geo_google_mode" "vpn"
+    [ "$status" -eq 0 ]
+    run state_validate_key "awg_geo_telegram_mode" "off"
+    [ "$status" -eq 0 ]
+}
+
+@test "state_validate_key rejects invalid awg_geo_<cat>_mode value" {
+    run state_validate_key "awg_geo_ru_mode" "bypass"
+    [ "$status" -ne 0 ]
+}
+
+@test "state_validate_key accepts awg_geo_entries_direct (csv CIDR)" {
+    run state_validate_key "awg_geo_entries_direct" "10.0.0.0/8,192.168.0.0/16"
+    [ "$status" -eq 0 ]
+    run state_validate_key "awg_geo_entries_direct" ""
+    [ "$status" -eq 0 ]
+}
+
+@test "state_validate_key rejects awg_geo_entries_direct with bad CIDR" {
+    run state_validate_key "awg_geo_entries_direct" "not.an.ip/24"
+    [ "$status" -ne 0 ]
+}
+
+@test "state_validate_key accepts awg_geo_sync_parallel in 1..8" {
+    run state_validate_key "awg_geo_sync_parallel" "3"
+    [ "$status" -eq 0 ]
+}
+
+@test "state_validate_key rejects awg_geo_sync_parallel out of range" {
+    run state_validate_key "awg_geo_sync_parallel" "0"
+    [ "$status" -ne 0 ]
+    run state_validate_key "awg_geo_sync_parallel" "9"
+    [ "$status" -ne 0 ]
+}
+
+@test "state_validate_key accepts awg_geo_sync_weekday 0..6 and hour 0..23" {
+    run state_validate_key "awg_geo_sync_weekday" "0"
+    [ "$status" -eq 0 ]
+    run state_validate_key "awg_geo_sync_weekday" "6"
+    [ "$status" -eq 0 ]
+    run state_validate_key "awg_geo_sync_hour" "23"
+    [ "$status" -eq 0 ]
+}
+
+@test "state_validate_key accepts awg_dev_N_policy = vpn_except_geo" {
+    run state_validate_key "awg_dev_0_policy" "vpn_except_geo"
+    [ "$status" -eq 0 ]
+}

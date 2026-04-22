@@ -252,6 +252,80 @@ migrate_from_v1() {
     return 0
 }
 
+# --- key validation ----------------------------------------------------------
+
+# state_validate_key KEY VALUE
+# Returns 0 if VALUE is acceptable for KEY, 1 otherwise.
+# Uses case-glob matching on KEY; the final *) clause accepts unknown keys
+# without complaint so that future keys don't break old code.
+state_validate_key() {
+    _key="$1"
+    _val="$2"
+    case "${_key}" in
+        awg_geo_*_mode)
+            case "${_val}" in
+                off|vpn|direct) return 0 ;;
+                *) log_warn "state: invalid mode ${_val} for ${_key} (expected off|vpn|direct)"; return 1 ;;
+            esac
+            ;;
+        awg_geo_entries_direct)
+            [ -z "${_val}" ] && return 0
+            _IFS_save="${IFS}"; IFS=','
+            for _c in ${_val}; do
+                _c="$(printf '%s' "${_c}" | tr -d ' ')"
+                [ -z "${_c}" ] && continue
+                case "${_c}" in
+                    *:*/*)
+                        printf '%s' "${_c}" | grep -Eq '^[0-9A-Fa-f:]+/[0-9]+$' || {
+                            IFS="${_IFS_save}"; return 1
+                        }
+                        ;;
+                    *.*.*.*/*)
+                        printf '%s' "${_c}" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+/[0-9]+$' || {
+                            IFS="${_IFS_save}"; return 1
+                        }
+                        ;;
+                    *)
+                        IFS="${_IFS_save}"; return 1
+                        ;;
+                esac
+            done
+            IFS="${_IFS_save}"
+            return 0
+            ;;
+        awg_geo_sync_parallel)
+            case "${_val}" in 1|2|3|4|5|6|7|8) return 0 ;; *) return 1 ;; esac
+            ;;
+        awg_geo_sync_weekday)
+            case "${_val}" in 0|1|2|3|4|5|6) return 0 ;; *) return 1 ;; esac
+            ;;
+        awg_geo_sync_hour)
+            case "${_val}" in
+                0|1|2|3|4|5|6|7|8|9|10|11|12|13|14|15|16|17|18|19|20|21|22|23) return 0 ;;
+                *) return 1 ;;
+            esac
+            ;;
+        awg_geo_categories_custom)
+            [ -z "${_val}" ] && return 0
+            _IFS_save="${IFS}"; IFS=','
+            for _c in ${_val}; do
+                case "${_c}" in *[!a-zA-Z0-9_-]*) IFS="${_IFS_save}"; return 1 ;; esac
+            done
+            IFS="${_IFS_save}"
+            return 0
+            ;;
+        awg_dev_*_policy)
+            case "${_val}" in
+                vpn_all|vpn_geo|vpn_except_geo|direct) return 0 ;;
+                *) return 1 ;;
+            esac
+            ;;
+        *)
+            return 0
+            ;;
+    esac
+}
+
 backup_before_remove() {
     _ts="$(date +%Y%m%d-%H%M%S)"
     _state_ensure_backup_dir
