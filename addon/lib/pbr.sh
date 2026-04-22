@@ -160,13 +160,15 @@ pbr_apply() {
                 # the blanket MARK for this source — iptables evaluates rules
                 # in append order. -A appends, so insertion order here matches
                 # traversal order.
+                # Routing is via the global fwmark rule (prio 98) — we do NOT
+                # add a per-source 'from <ip>' rule, because that would force
+                # all packets from this IP through table 300 and defeat the
+                # RETURN bypass. Mangle-only, like vpn_geo.
                 iptables -t mangle -A AMNEZIAWG -s "${_ip}" \
                     -m set --match-set awg_geo_direct dst \
                     -j RETURN
                 iptables -t mangle -A AMNEZIAWG -s "${_ip}" \
                     -j MARK --set-mark "${_PBR_FWMARK}"
-                ip rule del from "${_ip}" lookup "${_PBR_TABLE}" prio "${_PBR_PRIO_SOURCE}" 2>/dev/null || true
-                ip rule add from "${_ip}" lookup "${_PBR_TABLE}" prio "${_PBR_PRIO_SOURCE}"
                 ;;
         esac
     done
@@ -195,9 +197,6 @@ pbr_teardown() {
                 ;;
             direct)
                 ip rule del from "${_ip}" lookup main prio "${_PBR_PRIO_DIRECT}" 2>/dev/null || true
-                ;;
-            vpn_except_geo)
-                ip rule del from "${_ip}" lookup "${_PBR_TABLE}" prio "${_PBR_PRIO_SOURCE}" 2>/dev/null || true
                 ;;
         esac
     done

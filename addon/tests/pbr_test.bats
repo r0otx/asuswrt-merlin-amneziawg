@@ -308,17 +308,22 @@ _add_device() {
     [ -n "${_return_line}" ] && [ -n "${_mark_line}" ] && [ "${_return_line}" -lt "${_mark_line}" ]
 }
 
-@test "pbr_setup adds ip rule for vpn_except_geo device" {
+@test "pbr_setup does NOT add per-source ip rule for vpn_except_geo device (mangle-only)" {
     _add_device 0 192.168.1.50 ff:ff:ff:ff:ff:01 laptop vpn_except_geo
     pbr_setup
-    grep -q 'rule add from 192.168.1.50 lookup 300 prio 99' "${TMPDIR_TEST}/ip.log"
+    ! grep -q 'rule add from 192.168.1.50 lookup 300' "${TMPDIR_TEST}/ip.log"
+    # But the global fwmark rule must still be present
+    grep -q 'rule add fwmark 0x100/0xFF00 lookup 300 prio 98' "${TMPDIR_TEST}/ip.log"
 }
 
-@test "pbr_teardown removes ip rule for vpn_except_geo device" {
+@test "pbr_teardown for vpn_except_geo leaves no iptables rules and no per-source ip rule to del" {
     _add_device 0 192.168.1.50 ff:ff:ff:ff:ff:01 laptop vpn_except_geo
     pbr_setup
     pbr_teardown
-    grep -q 'rule del from 192.168.1.50 lookup 300 prio 99' "${TMPDIR_TEST}/ip.log"
+    # No per-source ip rule was ever added, and none should be deleted either
+    ! grep -q 'rule del from 192.168.1.50 lookup 300' "${TMPDIR_TEST}/ip.log"
+    # AMNEZIAWG chain is flushed
+    [ -z "$(iptables -t mangle -S AMNEZIAWG 2>/dev/null | grep '^-A')" ]
 }
 
 @test "pbr_kill_switch_arm includes vpn_except_geo devices in DROP set" {
