@@ -117,3 +117,39 @@ teardown() {
     run state_validate_key "awg_dev_0_policy" "vpn_except_geo"
     [ "$status" -eq 0 ]
 }
+
+@test "state_validate_key accepts awg_geo_categories_custom (valid names)" {
+    run state_validate_key "awg_geo_categories_custom" ""
+    [ "$status" -eq 0 ]
+    run state_validate_key "awg_geo_categories_custom" "mycat,another-cat,cat_3"
+    [ "$status" -eq 0 ]
+}
+
+@test "state_validate_key rejects awg_geo_categories_custom with invalid chars" {
+    run state_validate_key "awg_geo_categories_custom" "bad name"
+    [ "$status" -ne 0 ]
+    run state_validate_key "awg_geo_categories_custom" "cat,bad/name"
+    [ "$status" -ne 0 ]
+}
+
+@test "state_validate_key rejects awg_geo_sync_hour out of range" {
+    run state_validate_key "awg_geo_sync_hour" "24"
+    [ "$status" -ne 0 ]
+    run state_validate_key "awg_geo_sync_hour" "-1"
+    [ "$status" -ne 0 ]
+}
+
+@test "state_validate_key rejects awg_geo_entries_direct with out-of-range IPv4 prefix" {
+    run state_validate_key "awg_geo_entries_direct" "10.0.0.0/33"
+    [ "$status" -ne 0 ]
+}
+
+@test "state_validate_key rejects awg_geo_entries_direct with out-of-range IPv6 prefix" {
+    run state_validate_key "awg_geo_entries_direct" "2001:db8::/129"
+    [ "$status" -ne 0 ]
+}
+
+@test "state_validate_key catch-all accepts unknown keys" {
+    run state_validate_key "awg_unknown_future_key" "anything"
+    [ "$status" -eq 0 ]
+}

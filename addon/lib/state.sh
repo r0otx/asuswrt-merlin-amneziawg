@@ -265,7 +265,7 @@ state_validate_key() {
         awg_geo_*_mode)
             case "${_val}" in
                 off|vpn|direct) return 0 ;;
-                *) log_warn "state: invalid mode ${_val} for ${_key} (expected off|vpn|direct)"; return 1 ;;
+                *) log_warn "state: invalid value '${_val}' for key '${_key}' (expected off|vpn|direct)"; return 1 ;;
             esac
             ;;
         awg_geo_entries_direct)
@@ -277,15 +277,28 @@ state_validate_key() {
                 case "${_c}" in
                     *:*/*)
                         printf '%s' "${_c}" | grep -Eq '^[0-9A-Fa-f:]+/[0-9]+$' || {
+                            log_warn "state: invalid value '${_val}' for key '${_key}' (expected CSV of valid CIDR entries)"
                             IFS="${_IFS_save}"; return 1
                         }
+                        _prefix="${_c##*/}"
+                        case "${_prefix}" in
+                            ''|*[!0-9]*) log_warn "state: invalid value '${_val}' for key '${_key}' (expected CSV of valid CIDR entries)"; IFS="${_IFS_save}"; return 1 ;;
+                        esac
+                        [ "${_prefix}" -le 128 ] 2>/dev/null || { log_warn "state: invalid value '${_val}' for key '${_key}' (expected CSV of valid CIDR entries)"; IFS="${_IFS_save}"; return 1; }
                         ;;
                     *.*.*.*/*)
                         printf '%s' "${_c}" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+/[0-9]+$' || {
+                            log_warn "state: invalid value '${_val}' for key '${_key}' (expected CSV of valid CIDR entries)"
                             IFS="${_IFS_save}"; return 1
                         }
+                        _prefix="${_c##*/}"
+                        case "${_prefix}" in
+                            ''|*[!0-9]*) log_warn "state: invalid value '${_val}' for key '${_key}' (expected CSV of valid CIDR entries)"; IFS="${_IFS_save}"; return 1 ;;
+                        esac
+                        [ "${_prefix}" -le 32 ] 2>/dev/null || { log_warn "state: invalid value '${_val}' for key '${_key}' (expected CSV of valid CIDR entries)"; IFS="${_IFS_save}"; return 1; }
                         ;;
                     *)
+                        log_warn "state: invalid value '${_val}' for key '${_key}' (expected CSV of valid CIDR entries)"
                         IFS="${_IFS_save}"; return 1
                         ;;
                 esac
@@ -294,22 +307,30 @@ state_validate_key() {
             return 0
             ;;
         awg_geo_sync_parallel)
-            case "${_val}" in 1|2|3|4|5|6|7|8) return 0 ;; *) return 1 ;; esac
+            case "${_val}" in
+                1|2|3|4|5|6|7|8) return 0 ;;
+                *) log_warn "state: invalid value '${_val}' for key '${_key}' (expected 1..8)"; return 1 ;;
+            esac
             ;;
         awg_geo_sync_weekday)
-            case "${_val}" in 0|1|2|3|4|5|6) return 0 ;; *) return 1 ;; esac
+            case "${_val}" in
+                0|1|2|3|4|5|6) return 0 ;;
+                *) log_warn "state: invalid value '${_val}' for key '${_key}' (expected 0..6)"; return 1 ;;
+            esac
             ;;
         awg_geo_sync_hour)
             case "${_val}" in
                 0|1|2|3|4|5|6|7|8|9|10|11|12|13|14|15|16|17|18|19|20|21|22|23) return 0 ;;
-                *) return 1 ;;
+                *) log_warn "state: invalid value '${_val}' for key '${_key}' (expected 0..23)"; return 1 ;;
             esac
             ;;
         awg_geo_categories_custom)
             [ -z "${_val}" ] && return 0
             _IFS_save="${IFS}"; IFS=','
             for _c in ${_val}; do
-                case "${_c}" in *[!a-zA-Z0-9_-]*) IFS="${_IFS_save}"; return 1 ;; esac
+                case "${_c}" in
+                    *[!a-zA-Z0-9_-]*) log_warn "state: invalid value '${_val}' for key '${_key}' (expected CSV of [a-zA-Z0-9_-] names)"; IFS="${_IFS_save}"; return 1 ;;
+                esac
             done
             IFS="${_IFS_save}"
             return 0
@@ -317,7 +338,7 @@ state_validate_key() {
         awg_dev_*_policy)
             case "${_val}" in
                 vpn_all|vpn_geo|vpn_except_geo|direct) return 0 ;;
-                *) return 1 ;;
+                *) log_warn "state: invalid value '${_val}' for key '${_key}' (expected vpn_all|vpn_geo|vpn_except_geo|direct)"; return 1 ;;
             esac
             ;;
         *)
