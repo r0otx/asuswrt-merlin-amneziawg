@@ -281,3 +281,15 @@ _add_device() {
     run state_get "awg_geo_entries_direct"
     [ "$output" = "" ]
 }
+
+@test "pbr_geo_direct_add/remove normalize whitespace in CIDR argument" {
+    pbr_geo_direct_add " 10.0.0.0/8"
+    run state_get "awg_geo_entries_direct"
+    [ "$output" = "10.0.0.0/8" ]
+    pbr_geo_direct_add "192.168.0.0/16 "
+    run state_get "awg_geo_entries_direct"
+    [ "$output" = "10.0.0.0/8,192.168.0.0/16" ]
+    pbr_geo_direct_remove " 10.0.0.0/8"
+    run state_get "awg_geo_entries_direct"
+    [ "$output" = "192.168.0.0/16" ]
+}

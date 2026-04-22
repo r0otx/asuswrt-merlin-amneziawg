@@ -273,6 +273,11 @@ pbr_geo_clear() {
     state_set "awg_geo_entries" ""
 }
 
+# NOTE: The initial 'ipset destroy' is best-effort (tolerated via || true) and
+# handles the v1 hash:ip -> hash:net schema migration. On a live system with
+# iptables rules referencing this set, destroy will fail silently — callers
+# must invoke pbr_teardown (or equivalent chain flush) first if the set is
+# already populated and referenced. pbr_setup enforces this ordering.
 pbr_geo_apply() {
     _list="$(state_get awg_geo_entries)"
     ipset destroy "${GEO_IPSET_VPN}" 2>/dev/null || true
@@ -299,7 +304,7 @@ pbr_geo_apply() {
 }
 
 pbr_geo_direct_add() {
-    _cidr="$1"
+    _cidr="$(printf '%s' "$1" | tr -d ' ')"
     [ -n "${_cidr}" ] || return 1
     _existing="$(state_get awg_geo_entries_direct)"
     if [ -z "${_existing}" ]; then
@@ -310,7 +315,7 @@ pbr_geo_direct_add() {
 }
 
 pbr_geo_direct_remove() {
-    _cidr="$1"
+    _cidr="$(printf '%s' "$1" | tr -d ' ')"
     _existing="$(state_get awg_geo_entries_direct)"
     [ -z "${_existing}" ] && return 0
     _new=""
@@ -328,6 +333,11 @@ pbr_geo_direct_clear() {
     state_set "awg_geo_entries_direct" ""
 }
 
+# NOTE: The initial 'ipset destroy' is best-effort (tolerated via || true) and
+# handles the v1 hash:ip -> hash:net schema migration. On a live system with
+# iptables rules referencing this set, destroy will fail silently — callers
+# must invoke pbr_teardown (or equivalent chain flush) first if the set is
+# already populated and referenced. pbr_setup enforces this ordering.
 pbr_geo_direct_apply() {
     _list="$(state_get awg_geo_entries_direct)"
     ipset destroy "${GEO_IPSET_DIRECT}" 2>/dev/null || true
