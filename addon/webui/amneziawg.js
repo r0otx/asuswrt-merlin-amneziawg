@@ -292,6 +292,14 @@
             return { ok: errors.length === 0, errors: errors };
         }
 
+        function validatePolicy(p) {
+            return p === 'vpn_all' || p === 'vpn_geo'
+                || p === 'vpn_except_geo' || p === 'direct';
+        }
+        function validateGeoMode(m) {
+            return m === 'off' || m === 'vpn' || m === 'direct';
+        }
+
         return {
             validateKey: validateKey,
             validateAddr: validateAddr,
@@ -300,7 +308,9 @@
             validateIntRange: validateIntRange,
             validateHValue: validateHValue,
             validateISeq: validateISeq,
-            validateAll: validateAll
+            validateAll: validateAll,
+            validatePolicy: validatePolicy,
+            validateGeoMode: validateGeoMode
         };
     })();
 
@@ -508,7 +518,7 @@
         var _devices = [];
         var _leases = [];
 
-        var POLICIES = ['direct', 'vpn_all', 'vpn_geo'];
+        var POLICIES = ['vpn_all', 'vpn_geo', 'vpn_except_geo', 'direct'];
 
         function setDevices(devs) {
             _devices = Array.isArray(devs) ? devs.slice() : [];
@@ -680,6 +690,7 @@
         }
 
         return {
+            POLICIES: POLICIES,
             setDevices: setDevices,
             snapshot: snapshot,
             add: add,
@@ -687,6 +698,98 @@
             updateLeasePicker: updateLeasePicker,
             addFromLeasePicker: addFromLeasePicker,
             addManual: addManual
+        };
+    })();
+
+
+    // ---------- AWG.geo ----------
+
+    AWG.geo = (function () {
+        var CURATED = [
+            'google', 'youtube', 'netflix', 'telegram', 'cloudflare',
+            'github', 'discord', 'twitter', 'meta', 'tiktok',
+            'cn', 'ru', 'by', 'ua', 'private', 'tor'
+        ];
+        var MODES = ['off', 'vpn', 'direct'];
+
+        function modeKey(cat) { return 'awg_geo_' + cat + '_mode'; }
+        function modeToIpset(mode) {
+            if (mode === 'vpn')    return 'awg_geo_dst';
+            if (mode === 'direct') return 'awg_geo_direct';
+            return null;
+        }
+        function categoryMode(state, cat) {
+            var v = state && state[modeKey(cat)];
+            return (v === 'vpn' || v === 'direct') ? v : 'off';
+        }
+
+        function renderCategoryRow(state, cat) {
+            var tr = document.createElement('tr');
+            var tdName = document.createElement('td');
+            tdName.textContent = cat;
+            var tdMode = document.createElement('td');
+            var sel = document.createElement('select');
+            sel.name = modeKey(cat);
+            sel.className = 'awg-geo-mode';
+            for (var i = 0; i < MODES.length; i++) {
+                var opt = document.createElement('option');
+                opt.value = MODES[i];
+                opt.textContent = MODES[i];
+                if (categoryMode(state, cat) === MODES[i]) opt.selected = true;
+                sel.appendChild(opt);
+            }
+            tdMode.appendChild(sel);
+            tr.appendChild(tdName);
+            tr.appendChild(tdMode);
+            return tr;
+        }
+
+        function renderAll(tbody, state) {
+            while (tbody.firstChild) tbody.removeChild(tbody.firstChild);
+            for (var i = 0; i < CURATED.length; i++) {
+                tbody.appendChild(renderCategoryRow(state, CURATED[i]));
+            }
+            var custom = ((state && state.awg_geo_categories_custom) || '')
+                .split(',').map(function (s) { return s.trim(); }).filter(Boolean);
+            for (var j = 0; j < custom.length; j++) {
+                tbody.appendChild(renderCategoryRow(state, custom[j]));
+            }
+        }
+
+        function syncNow(onResult) {
+            var form = new FormData();
+            form.append('action_mode', ' Restart ');
+            form.append('action_script', 'start_awggeosync');
+            fetch('/apply.cgi', { method: 'POST', body: form, credentials: 'same-origin' })
+                .then(function (r) { onResult(r.ok, null); })
+                .catch(function (e) { onResult(false, String(e)); });
+        }
+
+        function renderStatus(el, geoJson) {
+            if (!geoJson) { el.textContent = 'n/a'; return; }
+            var parts = [];
+            if (geoJson.last_sync && geoJson.last_sync > 0) {
+                parts.push('last sync: ' + new Date(geoJson.last_sync * 1000).toISOString());
+            } else {
+                parts.push('last sync: never');
+            }
+            parts.push('enabled: ' + ((geoJson.enabled || []).length));
+            if (geoJson.errors && geoJson.errors.length > 0) {
+                parts.push('errors: ' + geoJson.errors.join(', '));
+            }
+            el.textContent = parts.join(' · ');
+        }
+
+        return {
+            CURATED: CURATED,
+            MODES: MODES,
+            modeKey: modeKey,
+            modeToIpset: modeToIpset,
+            categoryMode: categoryMode,
+            renderCategoryRow: renderCategoryRow,
+            renderAll: renderAll,
+            syncNow: syncNow,
+            renderStatus: renderStatus
         };
     })();
 

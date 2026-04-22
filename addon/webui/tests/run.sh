@@ -18,4 +18,4 @@ if [ "${node_major}" -lt 18 ] 2>/dev/null; then
     exit 0
 fi
 
-node --test webui/tests/parser.test.js webui/tests/validator.test.js
+node --test webui/tests/parser.test.js webui/tests/validator.test.js webui/tests/geo.test.js
