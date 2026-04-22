@@ -178,3 +178,26 @@ teardown() {
     watchdog_tick
     [ ! -f "${AMNEZIAWG_RUNTIME}/killswitch-armed" ]
 }
+
+@test "watchdog_tick calls metrics_sample at the end" {
+    # Shadow metrics_sample to record the call — library is not otherwise
+    # sourced in this test to keep watchdog tests focused on cron semantics.
+    metrics_sample() { printf 'metrics_sample called\n' >> "${TMPDIR_TEST}/metrics.log"; }
+    state_set "awg_enabled" "1"
+    watchdog_tick
+    grep -q 'metrics_sample called' "${TMPDIR_TEST}/metrics.log"
+}
+
+@test "watchdog_tick calls metrics_sample even when rate-limited" {
+    metrics_sample() { printf 'metrics_sample called\n' >> "${TMPDIR_TEST}/metrics.log"; }
+    state_set "awg_enabled" "1"
+    # Pre-fill rate-limit window so the next restart attempt is short-circuited.
+    _now=$(date +%s)
+    _wd_read_state
+    _last_tick=$((_now - 60))
+    _restart_win_start="${_now}"
+    _restart_count=3
+    _wd_write_state
+    watchdog_tick
+    grep -q 'metrics_sample called' "${TMPDIR_TEST}/metrics.log"
+}

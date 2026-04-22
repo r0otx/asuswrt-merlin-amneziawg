@@ -108,4 +108,7 @@ watchdog_tick() {
     fi
 
     status_emit_json
+    if command -v metrics_sample >/dev/null 2>&1; then
+        metrics_sample || log_warn "watchdog: metrics_sample failed"
+    fi
 }
