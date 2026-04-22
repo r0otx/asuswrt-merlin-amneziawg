@@ -155,6 +155,19 @@ pbr_apply() {
                     -m set --match-set awg_geo_dst dst \
                     -j MARK --set-mark "${_PBR_FWMARK}"
                 ;;
+            vpn_except_geo)
+                # RETURN for packets destined to the bypass pool must precede
+                # the blanket MARK for this source — iptables evaluates rules
+                # in append order. -A appends, so insertion order here matches
+                # traversal order.
+                iptables -t mangle -A AMNEZIAWG -s "${_ip}" \
+                    -m set --match-set awg_geo_direct dst \
+                    -j RETURN
+                iptables -t mangle -A AMNEZIAWG -s "${_ip}" \
+                    -j MARK --set-mark "${_PBR_FWMARK}"
+                ip rule del from "${_ip}" lookup "${_PBR_TABLE}" prio "${_PBR_PRIO_SOURCE}" 2>/dev/null || true
+                ip rule add from "${_ip}" lookup "${_PBR_TABLE}" prio "${_PBR_PRIO_SOURCE}"
+                ;;
         esac
     done
 
@@ -183,6 +196,9 @@ pbr_teardown() {
             direct)
                 ip rule del from "${_ip}" lookup main prio "${_PBR_PRIO_DIRECT}" 2>/dev/null || true
                 ;;
+            vpn_except_geo)
+                ip rule del from "${_ip}" lookup "${_PBR_TABLE}" prio "${_PBR_PRIO_SOURCE}" 2>/dev/null || true
+                ;;
         esac
     done
     ip rule del fwmark "${_PBR_FWMARK}" lookup "${_PBR_TABLE}" prio "${_PBR_PRIO_FWMARK}" 2>/dev/null || true
@@ -204,7 +220,7 @@ pbr_kill_switch_arm() {
 
     pbr_load_devices | while IFS="$(printf '\t')" read -r _n _ip _mac _name _policy; do
         case "${_policy}" in
-            vpn_all|vpn_geo)
+            vpn_all|vpn_geo|vpn_except_geo)
                 iptables -A AMNEZIAWG_KILL -s "${_ip}" -j DROP
                 ;;
         esac

@@ -293,3 +293,36 @@ _add_device() {
     run state_get "awg_geo_entries_direct"
     [ "$output" = "192.168.0.0/16" ]
 }
+
+@test "pbr_setup emits RETURN-before-MARK for vpn_except_geo device" {
+    # Use a MAC not in dnsmasq-leases or ip-neigh fixtures so _pbr_resolve_ip
+    # returns nothing and the stored IP 192.168.1.50 is used as-is.
+    _add_device 0 192.168.1.50 ff:ff:ff:ff:ff:01 laptop vpn_except_geo
+    pbr_setup
+    # Both rules must exist for this source IP
+    iptables -t mangle -S AMNEZIAWG | grep -q -- '-s 192.168.1.50 -m set --match-set awg_geo_direct dst -j RETURN'
+    iptables -t mangle -S AMNEZIAWG | grep -q -- '-s 192.168.1.50 -j MARK --set-mark 0x100/0xFF00'
+    # RETURN must precede MARK in chain order
+    _return_line="$(iptables -t mangle -S AMNEZIAWG | grep -n -- '-s 192.168.1.50 .*-j RETURN' | head -1 | cut -d: -f1)"
+    _mark_line="$(iptables -t mangle -S AMNEZIAWG | grep -n -- '-s 192.168.1.50 -j MARK' | head -1 | cut -d: -f1)"
+    [ -n "${_return_line}" ] && [ -n "${_mark_line}" ] && [ "${_return_line}" -lt "${_mark_line}" ]
+}
+
+@test "pbr_setup adds ip rule for vpn_except_geo device" {
+    _add_device 0 192.168.1.50 ff:ff:ff:ff:ff:01 laptop vpn_except_geo
+    pbr_setup
+    grep -q 'rule add from 192.168.1.50 lookup 300 prio 99' "${TMPDIR_TEST}/ip.log"
+}
+
+@test "pbr_teardown removes ip rule for vpn_except_geo device" {
+    _add_device 0 192.168.1.50 ff:ff:ff:ff:ff:01 laptop vpn_except_geo
+    pbr_setup
+    pbr_teardown
+    grep -q 'rule del from 192.168.1.50 lookup 300 prio 99' "${TMPDIR_TEST}/ip.log"
+}
+
+@test "pbr_kill_switch_arm includes vpn_except_geo devices in DROP set" {
+    _add_device 0 192.168.1.50 ff:ff:ff:ff:ff:01 laptop vpn_except_geo
+    pbr_kill_switch_arm
+    iptables -S AMNEZIAWG_KILL | grep -q -- '-s 192.168.1.50 -j DROP'
+}
