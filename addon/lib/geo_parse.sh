@@ -73,12 +73,6 @@ geo_resolve_includes() {
                         "$(( _max_depth - 1 ))" \
                         "${_visited},${_target}"
                 ;;
-            domain:*|full:*)
-                _bare="${_line#domain:}"
-                _bare="${_bare#full:}"
-                _bare="${_bare%% *}"
-                [ -n "${_bare}" ] && printf '%s\n' "${_bare}"
-                ;;
             *)
                 [ -n "${_line}" ] && printf '%s\n' "${_line}"
                 ;;

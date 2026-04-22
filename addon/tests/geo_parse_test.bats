@@ -68,7 +68,7 @@ teardown() { rm -rf "${TMPDIR_TEST}"; }
 }
 
 @test "geo_resolve_includes handles missing include target gracefully" {
-    result="$(printf 'domain:ok.com\ninclude:nonexistent\n' | geo_resolve_includes "${TMPDIR_TEST}" "3" "root")"
+    result="$(printf 'domain:ok.com\ninclude:nonexistent\n' | geo_filter_domain | geo_resolve_includes "${TMPDIR_TEST}" "3" "root")"
     echo "${result}" | grep -q '^ok.com$'
     grep -q 'geo_resolve_includes: missing' "${AMNEZIAWG_LOG_FILE}"
 }
