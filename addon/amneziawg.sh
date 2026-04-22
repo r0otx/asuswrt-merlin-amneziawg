@@ -20,6 +20,7 @@ AWG_VERSION="0.0.0-dev"
 . "${AWG_ADDON_DIR}/lib/dns.sh"
 . "${AWG_ADDON_DIR}/lib/firewall.sh"
 . "${AWG_ADDON_DIR}/lib/pbr.sh"
+. "${AWG_ADDON_DIR}/lib/geo_parse.sh"
 . "${AWG_ADDON_DIR}/lib/geo.sh"
 
 print_usage() {
@@ -90,7 +91,21 @@ case "${cmd}" in
 
     import)         config_import_from_stdin ;;
 
-    update_geo|check_update|update)
+    geo)
+        _sub="$1"; shift 2>/dev/null || true
+        case "${_sub}" in
+            sync)       geo_sync "$@" ;;
+            list)       geo_list "$@" ;;
+            categories) geo_categories ;;
+            status)     geo_status ;;
+            clear)      geo_clear "$@" ;;
+            *)
+                printf 'Usage: %s geo <sync|list|categories|status|clear>\n' "${0##*/}" >&2
+                exit 64 ;;
+        esac
+        ;;
+
+    check_update|update)
         _not_implemented "${cmd}"
         ;;
 

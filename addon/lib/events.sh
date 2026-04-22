@@ -16,6 +16,7 @@ event_service() {
         start,awgstop)                      tunnel_stop ;;
         start,awgrestart)                   tunnel_restart ;;
         start,awgsaveconf)                  tunnel_reload ;;
+        start,awggeosync|restart,awggeosync) geo_sync ;;
         *) log_debug "event_service: ignoring ${_event}/${_target}" ;;
     esac
 }

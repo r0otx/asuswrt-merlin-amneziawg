@@ -90,6 +90,8 @@ EOF
     . "${BATS_TEST_DIRNAME}/../lib/dns.sh"
     . "${BATS_TEST_DIRNAME}/../lib/firewall.sh"
     . "${BATS_TEST_DIRNAME}/../lib/pbr.sh"
+    . "${BATS_TEST_DIRNAME}/../lib/geo_parse.sh"
+    . "${BATS_TEST_DIRNAME}/../lib/geo.sh"
     . "${BATS_TEST_DIRNAME}/../lib/events.sh"
 
     state_set "awg_enabled"           "1"
@@ -168,6 +170,15 @@ teardown() {
 @test "event_service unknown target is noop" {
     event_service start other-addon
     ! grep -q "^awg-quick" "${MOCK_LOG}"
+}
+
+@test "event_service start awggeosync invokes geo_sync" {
+    # Shadow geo_sync to record the call (avoid real network/state rebuild)
+    export AMNEZIAWG_GEO_ROOT="${TMPDIR_TEST}/geo"
+    mkdir -p "${AMNEZIAWG_GEO_ROOT}"
+    geo_sync() { printf 'geo_sync called\n' >> "${TMPDIR_TEST}/geo.log"; }
+    event_service start awggeosync
+    grep -q 'geo_sync called' "${TMPDIR_TEST}/geo.log"
 }
 
 @test "event_firewall calls pbr_reapply_incremental" {
