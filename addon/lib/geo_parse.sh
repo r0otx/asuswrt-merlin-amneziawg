@@ -37,3 +37,51 @@ geo_filter_domain() {
         }
     '
 }
+
+geo_resolve_includes() {
+    # Args: <src_dir> <max_depth> <visited_csv>
+    # Stdin:  lines from geo_filter_domain (may contain include: directives)
+    # Stdout: fully expanded (include: replaced with target's filtered+resolved contents)
+    _src_dir="$1"; _max_depth="$2"; _visited="$3"
+    [ -z "${_max_depth}" ] && _max_depth=3
+
+    while IFS= read -r _line; do
+        case "${_line}" in
+            include:*)
+                _target="${_line#include:}"
+                _target="$(printf '%s' "${_target}" | tr -d ' \t')"
+                # Cycle check
+                case ",${_visited}," in
+                    *",${_target},"*)
+                        log_warn "geo_resolve_includes: cycle detected at ${_target} (visited=${_visited})"
+                        continue
+                        ;;
+                esac
+                # Depth check
+                if [ "${_max_depth}" -le 0 ] 2>/dev/null; then
+                    log_warn "geo_resolve_includes: depth cap hit at include:${_target}"
+                    continue
+                fi
+                # Missing-file check
+                if [ ! -f "${_src_dir}/${_target}" ]; then
+                    log_warn "geo_resolve_includes: missing include target ${_src_dir}/${_target}"
+                    continue
+                fi
+                # Recurse: filter the target and pipe into a recursive call with depth-1
+                geo_filter_domain < "${_src_dir}/${_target}" | \
+                    geo_resolve_includes "${_src_dir}" \
+                        "$(( _max_depth - 1 ))" \
+                        "${_visited},${_target}"
+                ;;
+            domain:*|full:*)
+                _bare="${_line#domain:}"
+                _bare="${_bare#full:}"
+                _bare="${_bare%% *}"
+                [ -n "${_bare}" ] && printf '%s\n' "${_bare}"
+                ;;
+            *)
+                [ -n "${_line}" ] && printf '%s\n' "${_line}"
+                ;;
+        esac
+    done
+}

@@ -37,3 +37,38 @@ teardown() { rm -rf "${TMPDIR_TEST}"; }
     echo "${result}" | grep -q '^include:youtube$'
     echo "${result}" | grep -q '^google.com$'
 }
+
+@test "geo_resolve_includes expands 3-level chain" {
+    cd "${BATS_TEST_DIRNAME}/fixtures/v2fly/domain"
+    result="$(geo_filter_domain < includes-a | geo_resolve_includes "." "3" "includes-a")"
+    echo "${result}" | grep -q '^a.com$'
+    echo "${result}" | grep -q '^b.com$'
+    echo "${result}" | grep -q '^c.com$'
+    ! echo "${result}" | grep -q '^include:'
+}
+
+@test "geo_resolve_includes caps recursion at max depth (logs warn)" {
+    cd "${BATS_TEST_DIRNAME}/fixtures/v2fly/domain"
+    # With depth=1, includes-a expansion resolves includes-b but not includes-c
+    result="$(geo_filter_domain < includes-a | geo_resolve_includes "." "1" "includes-a")"
+    echo "${result}" | grep -q '^a.com$'
+    echo "${result}" | grep -q '^b.com$'
+    ! echo "${result}" | grep -q '^c.com$'
+    grep -q 'geo_resolve_includes: depth cap' "${AMNEZIAWG_LOG_FILE}"
+}
+
+@test "geo_resolve_includes detects cycle and stops" {
+    cd "${BATS_TEST_DIRNAME}/fixtures/v2fly/domain"
+    result="$(geo_filter_domain < cycle-a | geo_resolve_includes "." "5" "cycle-a")"
+    echo "${result}" | grep -q '^ca.com$'
+    echo "${result}" | grep -q '^cb.com$'
+    # Must terminate; no duplicate ca.com beyond first occurrence
+    [ "$(echo "${result}" | grep -c '^ca.com$')" -eq 1 ]
+    grep -q 'geo_resolve_includes: cycle detected' "${AMNEZIAWG_LOG_FILE}"
+}
+
+@test "geo_resolve_includes handles missing include target gracefully" {
+    result="$(printf 'domain:ok.com\ninclude:nonexistent\n' | geo_resolve_includes "${TMPDIR_TEST}" "3" "root")"
+    echo "${result}" | grep -q '^ok.com$'
+    grep -q 'geo_resolve_includes: missing' "${AMNEZIAWG_LOG_FILE}"
+}
