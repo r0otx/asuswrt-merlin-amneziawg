@@ -77,3 +77,13 @@ clean: ## Remove build artifacts
 .PHONY: clean-all
 clean-all: clean ## Remove everything including Docker images
 	docker image rm -f amneziago-builder:aarch64 amneziago-builder:armv7 2>/dev/null || true
+
+.PHONY: deploy
+deploy: ## Build + scp + opkg install onto a router. Usage: make deploy ROUTER=admin@host
+	@if [ -z "$(ROUTER)" ]; then echo "ERROR: pass ROUTER=user@host" >&2; exit 64; fi
+	./scripts/install-local.sh --build --router "$(ROUTER)"
+
+.PHONY: undeploy
+undeploy: ## Uninstall packages on the router. Usage: make undeploy ROUTER=admin@host [PURGE=1]
+	@if [ -z "$(ROUTER)" ]; then echo "ERROR: pass ROUTER=user@host" >&2; exit 64; fi
+	./scripts/install-local.sh $(if $(PURGE),--purge,--uninstall) --router "$(ROUTER)"
