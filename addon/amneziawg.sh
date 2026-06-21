@@ -598,6 +598,20 @@ validate_uint(){
     return 0
 }
 
+validate_uint_or_range() {
+    echo "$1" | grep -qE '^[0-9]+(-[0-9]+)?$' || return 1
+
+    case "$1" in
+        *-*)
+            start=${1%-*}
+            end=${1#*-}
+            [ "$start" -le "$end" ] || return 1
+            ;;
+    esac
+
+    return 0
+}
+
 validate_ip(){
     echo "$1" | grep -qE '^[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}$' || return 1
     return 0
@@ -655,10 +669,10 @@ generate_config(){
     [ -n "$jmax" ] && { validate_uint "$jmax" || { log_msg "ERROR: Invalid Jmax: $jmax"; return 1; }; }
     [ -n "$s1" ] && { validate_uint "$s1" || { log_msg "ERROR: Invalid S1: $s1"; return 1; }; }
     [ -n "$s2" ] && { validate_uint "$s2" || { log_msg "ERROR: Invalid S2: $s2"; return 1; }; }
-    [ -n "$h1" ] && { validate_uint "$h1" || { log_msg "ERROR: Invalid H1: $h1"; return 1; }; }
-    [ -n "$h2" ] && { validate_uint "$h2" || { log_msg "ERROR: Invalid H2: $h2"; return 1; }; }
-    [ -n "$h3" ] && { validate_uint "$h3" || { log_msg "ERROR: Invalid H3: $h3"; return 1; }; }
-    [ -n "$h4" ] && { validate_uint "$h4" || { log_msg "ERROR: Invalid H4: $h4"; return 1; }; }
+    [ -n "$h1" ] && { validate_uint_or_range "$h1" || { log_msg "ERROR: Invalid H1: $h1"; return 1; }; }
+    [ -n "$h2" ] && { validate_uint_or_range "$h2" || { log_msg "ERROR: Invalid H2: $h2"; return 1; }; }
+    [ -n "$h3" ] && { validate_uint_or_range "$h3" || { log_msg "ERROR: Invalid H3: $h3"; return 1; }; }
+    [ -n "$h4" ] && { validate_uint_or_range "$h4" || { log_msg "ERROR: Invalid H4: $h4"; return 1; }; }
 
     {
         echo "[Interface]"
