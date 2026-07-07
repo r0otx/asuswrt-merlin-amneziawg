@@ -16,8 +16,10 @@ SETTINGS="/jffs/addons/custom_settings.txt"
 CLIENTS_FILE="$AWG_DIR/clients.list"
 GEO_DIR="$AWG_DIR/geo"
 IPSET_NAME="awg_dst"
+DIRECT_IPSET_NAME="awg_direct"
 FWMARK="0x100"
 DNSMASQ_AWG_CONF="$AWG_DIR/dnsmasq_awg.conf"
+DNSMASQ_DIRECT_CONF="$AWG_DIR/dnsmasq_awg_direct.conf"
 DNSMASQ_INCLUDE="/jffs/configs/dnsmasq.conf.add"
 SCRIPT_NAME="amneziawg"
 RT_TABLE=300
@@ -247,6 +249,88 @@ ipset_load_file(){
     ' "$file" | ipset restore -! 2>/dev/null
 }
 
+count_list_items(){
+    echo "$1" | tr ',' '\n' | awk '
+        {
+            gsub(/[ \t\r]/, "")
+            if($0 != "" && $0 !~ /^#/) count++
+        }
+        END{print count + 0}
+    '
+}
+
+load_direct_exceptions(){
+    local direct_ips direct_domains cidr domain
+    direct_ips=$(get_setting awg_direct_custom_ips)
+    direct_domains=$(get_setting awg_direct_custom_domains)
+    if [ "$(count_list_items "$direct_ips")" -eq 0 ] && [ "$(count_list_items "$direct_domains")" -eq 0 ]; then
+        rm -f "$DNSMASQ_DIRECT_CONF"
+        return 1
+    fi
+
+    ipset create "$DIRECT_IPSET_NAME" hash:net family inet hashsize 4096 maxelem 65536 2>/dev/null || \
+        ipset flush "$DIRECT_IPSET_NAME" 2>/dev/null
+    if ! ipset list "$DIRECT_IPSET_NAME" >/dev/null 2>&1; then
+        log_msg "WARNING: direct exceptions disabled, ipset $DIRECT_IPSET_NAME creation failed"
+        return 1
+    fi
+
+    if [ -n "$direct_ips" ]; then
+        echo "$direct_ips" | tr ',' '\n' | while read -r cidr; do
+            cidr=$(echo "$cidr" | tr -d ' \r')
+            [ -z "$cidr" ] && continue
+            echo "$cidr" | grep -q ':' && continue
+            ipset add "$DIRECT_IPSET_NAME" "$cidr" 2>/dev/null
+        done
+    fi
+
+    echo "# AmneziaWG direct exception routing - auto-generated" > "$DNSMASQ_DIRECT_CONF"
+    if [ -n "$direct_domains" ]; then
+        local chunk_line="ipset=/"
+        local chunk_count=0
+        local direct_domain_file="/tmp/.awg_direct_domains"
+        echo "$direct_domains" | tr ',' '\n' > "$direct_domain_file"
+        while read -r domain; do
+            domain=$(echo "$domain" | tr -d ' \r')
+            [ -z "$domain" ] && continue
+            echo "$domain" | grep -q '^#' && continue
+            domain=$(echo "$domain" | sed 's/^\.//;s/:@[^ ]*$//')
+            echo "$domain" | grep -q '[^a-zA-Z0-9._-]' && continue
+            chunk_line="${chunk_line}${domain}/"
+            chunk_count=$((chunk_count + 1))
+            if [ $chunk_count -ge 20 ]; then
+                echo "${chunk_line}${DIRECT_IPSET_NAME}" >> "$DNSMASQ_DIRECT_CONF"
+                chunk_line="ipset=/"
+                chunk_count=0
+            fi
+        done < "$direct_domain_file"
+        rm -f "$direct_domain_file"
+        [ $chunk_count -gt 0 ] && echo "${chunk_line}${DIRECT_IPSET_NAME}" >> "$DNSMASQ_DIRECT_CONF"
+    fi
+
+    if [ "$(count_list_items "$direct_domains")" -gt 0 ]; then
+        mkdir -p "$(dirname "$DNSMASQ_INCLUDE")"
+        if ! grep -qF "conf-file=$DNSMASQ_DIRECT_CONF" "$DNSMASQ_INCLUDE" 2>/dev/null; then
+            echo "conf-file=$DNSMASQ_DIRECT_CONF" >> "$DNSMASQ_INCLUDE"
+        fi
+    fi
+
+    return 0
+}
+
+pre_resolve_dnsmasq_ipsets(){
+    local conf="$1"
+    [ -f "$conf" ] || return 0
+    local bg_count=0
+    awk -F/ '/^ipset=/{for(i=2;i<NF;i++)print $i}' "$conf" | while read -r domain; do
+        [ -z "$domain" ] && continue
+        nslookup "$domain" 127.0.0.1 >/dev/null 2>&1 &
+        bg_count=$((bg_count + 1))
+        [ $bg_count -ge 10 ] && { wait; bg_count=0; }
+    done
+    wait
+}
+
 # --- Unified firewall setup ---
 
 setup_dns_interception(){
@@ -304,10 +388,14 @@ cleanup_firewall(){
     # Destroy ipset
     ipset flush "$IPSET_NAME" 2>/dev/null
     ipset destroy "$IPSET_NAME" 2>/dev/null
+    ipset flush "$DIRECT_IPSET_NAME" 2>/dev/null
+    ipset destroy "$DIRECT_IPSET_NAME" 2>/dev/null
 
     # Remove dnsmasq config
     rm -f "$DNSMASQ_AWG_CONF"
+    rm -f "$DNSMASQ_DIRECT_CONF"
     [ -f "$DNSMASQ_INCLUDE" ] && sed -i "\|${DNSMASQ_AWG_CONF}|d" "$DNSMASQ_INCLUDE"
+    [ -f "$DNSMASQ_INCLUDE" ] && sed -i "\|${DNSMASQ_DIRECT_CONF}|d" "$DNSMASQ_INCLUDE"
 
     # Remove cron
     cru d awg_geo_update 2>/dev/null
@@ -324,12 +412,18 @@ setup_firewall(){
     local default_policy=$(get_setting awg_default_policy)
     [ -z "$default_policy" ] && default_policy="direct"
     local has_geo=false
+    local direct_domains=$(get_setting awg_direct_custom_domains)
+    local direct_domain_count=$(count_list_items "$direct_domains")
+    local direct_ipset_ready=false
 
     # --- Create ipset ---
     ipset create "$IPSET_NAME" hash:net family inet hashsize 4096 maxelem 131072 timeout 86400 2>/dev/null
     if ! ipset list "$IPSET_NAME" >/dev/null 2>&1; then
         log_msg "ERROR: ipset $IPSET_NAME creation failed, geo routing disabled"
         has_geo=false
+    fi
+    if load_direct_exceptions; then
+        direct_ipset_ready=true
     fi
 
     # --- Load GeoIP subnets into ipset (bulk) ---
@@ -423,6 +517,10 @@ setup_firewall(){
     iptables -t mangle -A "$AWG_CHAIN" -p udp -m multiport --dports 67,68,123 -j RETURN
     iptables -t mangle -A "$AWG_CHAIN" -d 224.0.0.0/4 -j RETURN
     [ -n "$endpoint" ] && iptables -t mangle -A "$AWG_CHAIN" -d "$endpoint" -j RETURN
+    if [ "$direct_ipset_ready" = true ]; then
+        iptables -t mangle -A "$AWG_CHAIN" -m set --match-set "$DIRECT_IPSET_NAME" dst -j RETURN
+        log_msg "Direct exceptions enabled"
+    fi
 
     # --- Per-device rules (two passes for correct ordering) ---
     save_clients
@@ -517,20 +615,12 @@ setup_firewall(){
     fi
 
     # --- Restart dnsmasq if geo active ---
-    if [ $domain_count -gt 0 ] || [ "$has_geo" = true ]; then
+    if [ $domain_count -gt 0 ] || [ $direct_domain_count -gt 0 ] || [ "$has_geo" = true ]; then
         service restart_dnsmasq >/dev/null 2>&1
         wait_for_dns 10
         # Pre-resolve domains to populate ipset
-        if [ -f "$DNSMASQ_AWG_CONF" ]; then
-            local bg_count=0
-            awk -F/ '/^ipset=/{for(i=2;i<NF;i++)print $i}' "$DNSMASQ_AWG_CONF" | while read -r domain; do
-                [ -z "$domain" ] && continue
-                nslookup "$domain" 127.0.0.1 >/dev/null 2>&1 &
-                bg_count=$((bg_count + 1))
-                [ $bg_count -ge 10 ] && { wait; bg_count=0; }
-            done
-            wait
-        fi
+        pre_resolve_dnsmasq_ipsets "$DNSMASQ_AWG_CONF"
+        pre_resolve_dnsmasq_ipsets "$DNSMASQ_DIRECT_CONF"
     fi
 
     # --- Always flush conntrack so devices reconnect through VPN ---
@@ -541,7 +631,10 @@ setup_firewall(){
         cru a awg_geo_update "0 4 * * * '$ADDON_DIR/amneziawg.sh' update_geo"
     fi
 
-    log_msg "Firewall configured: $ip_count IPs, $domain_count domains"
+    local direct_ip_count=0
+    ipset list "$DIRECT_IPSET_NAME" -t 2>/dev/null | grep -q "Number of entries" && \
+        direct_ip_count=$(ipset list "$DIRECT_IPSET_NAME" -t 2>/dev/null | awk '/Number of entries/{print $NF}')
+    log_msg "Firewall configured: $ip_count VPN IPs, $domain_count VPN domains, $direct_ip_count direct IPs, $direct_domain_count direct domains"
 }
 
 save_clients(){
@@ -925,11 +1018,18 @@ EOF
     [ -f "$DNSMASQ_AWG_CONF" ] && geo_domains=$(grep -c "^ipset=" "$DNSMASQ_AWG_CONF" 2>/dev/null)
     [ -z "$geo_domains" ] && geo_domains=0
 
+    local direct_ipset_count=0
+    ipset list "$DIRECT_IPSET_NAME" -t 2>/dev/null | grep -q "Number of entries" && \
+        direct_ipset_count=$(ipset list "$DIRECT_IPSET_NAME" -t 2>/dev/null | awk '/Number of entries/{print $NF}')
+
+    local direct_domains=0
+    direct_domains=$(count_list_items "$(get_setting awg_direct_custom_domains)")
+
     local geo_downloaded=false
     geo_available && geo_downloaded=true
 
     cat > "$STATUS_FILE" << STATUSEOF
-{"running":${running},"version":"${AWG_VERSION}","public_key":"${pub_key}","listen_port":"${listen_port}","interface_addr":"${iface_addr}","peers":${peers_json},"default_policy":"${default_policy}","clients":"${clients_data}","active_rules":${active_rules},"ipset_count":${ipset_count},"geo_domains":${geo_domains},"geo_downloaded":${geo_downloaded},"log":"${log_text}"}
+{"running":${running},"version":"${AWG_VERSION}","public_key":"${pub_key}","listen_port":"${listen_port}","interface_addr":"${iface_addr}","peers":${peers_json},"default_policy":"${default_policy}","clients":"${clients_data}","active_rules":${active_rules},"ipset_count":${ipset_count},"geo_domains":${geo_domains},"direct_ipset_count":${direct_ipset_count},"direct_domains":${direct_domains},"geo_downloaded":${geo_downloaded},"log":"${log_text}"}
 STATUSEOF
 }
 

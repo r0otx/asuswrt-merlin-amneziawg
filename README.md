@@ -41,6 +41,7 @@ VPN-клиент с обходом DPI-блокировок на базе [Amnez
 - **Маршрутизация по устройствам** -- политика VPN для каждого устройства: `VPN All`, `VPN Geo`, `Direct`
 - **GeoIP по сервисам** -- IP-диапазоны Telegram, Google, Netflix, Twitter и др. через [Loyalsoldier/geoip](https://github.com/Loyalsoldier/geoip)
 - **GeoSite по доменам** -- списки доменов через [v2fly/domain-list-community](https://github.com/v2fly/domain-list-community) + dnsmasq ipset
+- **Direct-исключения** -- обход VPN для выбранных доменов и IPv4/CIDR-диапазонов
 - **Свои домены и IP** -- ручное добавление доменов и CIDR-подсетей
 - **Перехват DNS** -- принудительный DNS через dnsmasq, блокировка DoH/DoT для надёжной гео-маршрутизации
 - **MSS clamping** -- автоматическое исправление TCP MSS для туннельного трафика
@@ -134,6 +135,15 @@ youtube,google,discord,netflix,spotify,instagram
 
 - **Custom Domains** -- домены через запятую (например `example.com,service.org`)
 - **Custom IPs** -- IP/CIDR через запятую (например `8.8.8.8,1.1.1.0/24`)
+
+### Direct-исключения
+
+Используйте **Direct Domains** и **Direct IPs / Subnets**, чтобы выбранные destination-адреса шли напрямую через WAN, а основная политика оставалась `VPN All`.
+
+- Direct-домены резолвятся через dnsmasq и добавляются в ipset `awg_direct`.
+- Direct IPv4-адреса и CIDR-диапазоны загружаются в `awg_direct` напрямую.
+- `awg_direct` проверяется до правил маршрутизации устройств и до общего VPN-mark.
+- Для доменных direct-исключений клиенты должны использовать роутер как DNS. IPv6-исключения не применяются, пока активна защита от IPv6 leak.
 
 ## Сборка из исходников
 

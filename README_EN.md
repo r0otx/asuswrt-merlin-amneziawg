@@ -35,6 +35,7 @@ Other aarch64 Merlin routers should also work.
 - **Per-device routing** -- assign VPN policy per device: `VPN All`, `VPN Geo`, `Direct`
 - **GeoIP service routing** -- IP ranges for Telegram, Google, Netflix, Twitter, etc. via [Loyalsoldier/geoip](https://github.com/Loyalsoldier/geoip)
 - **GeoSite domain routing** -- domain lists via [v2fly/domain-list-community](https://github.com/v2fly/domain-list-community) + dnsmasq ipset
+- **Direct exceptions** -- bypass VPN for selected destination domains and IPv4/CIDR ranges
 - **Custom domains & IPs** -- manual domain and CIDR entries
 - **DNS interception** -- forces DNS through dnsmasq, blocks DoH/DoT for reliable geo routing
 - **MSS clamping** -- automatic TCP MSS fix for tunnel traffic
@@ -128,6 +129,15 @@ Requires devices to use the router as DNS server. For iPhones: **Settings > Wi-F
 
 - **Custom Domains** -- comma-separated domains (e.g. `example.com,service.org`)
 - **Custom IPs** -- comma-separated IPs/CIDRs (e.g. `8.8.8.8,1.1.1.0/24`)
+
+### Direct Exceptions
+
+Use **Direct Domains** and **Direct IPs / Subnets** to bypass VPN for selected destinations while keeping the default policy as `VPN All`.
+
+- Direct domains are resolved by dnsmasq and added to the `awg_direct` ipset.
+- Direct IPv4 addresses and CIDR ranges are loaded into `awg_direct` directly.
+- The direct ipset is evaluated before per-device and default VPN marking rules.
+- Domain-based direct exceptions require clients to use the router as DNS. IPv6 direct exceptions are not applied while IPv6 leak protection is active.
 
 ## Building from source
 

@@ -11,6 +11,8 @@ cd "$SCRIPT_DIR"
 
 PKG_NAME="amneziawg"
 PKG_VERSION="1.1.6-1"
+TAR_BIN="${TAR_BIN:-$(command -v gtar || command -v tar)}"
+[ -z "$TAR_BIN" ] && { echo "ERROR: gtar or tar not found"; exit 1; }
 
 build_ipk(){
     local arch="$1"
@@ -98,7 +100,7 @@ PRERMEOF
     : > "$CONTROL_DIR/conffiles"
 
     cd "$CONTROL_DIR"
-    gtar czf "$WORK_DIR/control.tar.gz" --format=gnu ./control ./postinst ./prerm ./conffiles
+    "$TAR_BIN" czf "$WORK_DIR/control.tar.gz" --format=gnu ./control ./postinst ./prerm ./conffiles
     cd - > /dev/null
 
     # --- data tarball ---
@@ -144,13 +146,13 @@ INITEOF
     chmod 755 "$DATA_DIR/opt/etc/init.d/S99amneziawg"
 
     cd "$DATA_DIR"
-    gtar czf "$WORK_DIR/data.tar.gz" --format=gnu ./opt ./jffs
+    "$TAR_BIN" czf "$WORK_DIR/data.tar.gz" --format=gnu ./opt ./jffs
     cd - > /dev/null
 
     # --- Assemble .ipk (tar.gz format — Entware opkg uses tar.gz, not ar) ---
     cd "$WORK_DIR"
     mkdir -p "$SCRIPT_DIR/output"
-    gtar czf "$SCRIPT_DIR/output/$ipk_file" --format=gnu ./debian-binary ./data.tar.gz ./control.tar.gz
+    "$TAR_BIN" czf "$SCRIPT_DIR/output/$ipk_file" --format=gnu ./debian-binary ./data.tar.gz ./control.tar.gz
     cd "$SCRIPT_DIR"
 
     rm -rf "$WORK_DIR"

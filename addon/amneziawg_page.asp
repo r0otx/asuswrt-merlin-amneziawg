@@ -94,6 +94,13 @@
 .awg-ac-list div:hover, .awg-ac-list div.selected { background:#666; color:#fff; }
 .awg-ac-list::-webkit-scrollbar { width:5px; }
 .awg-ac-list::-webkit-scrollbar-thumb { background:#888; border-radius:3px; }
+.awg-textarea {
+    width:95%;
+    min-height:78px;
+    resize:vertical;
+    font-family:monospace;
+    font-size:12px;
+}
 </style>
 <script>
 var custom_settings = <% get_custom_settings(); %>;
@@ -102,6 +109,16 @@ var v2flyList = [];
 var v2flyIpList = ['telegram','google','facebook','twitter','netflix','cloudflare','fastly','cloudfront'];
 function escHtml(s){
     return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
+}
+function normalizeListValue(value){
+    return String(value || '')
+        .split(/[\n,]+/)
+        .map(function(s){ return s.replace(/\s+/g, '').replace(/^\./, ''); })
+        .filter(function(s){ return s; })
+        .join(',');
+}
+function listToTextarea(value){
+    return String(value || '').split(',').map(function(s){ return s.trim(); }).filter(function(s){ return s; }).join('\n');
 }
 function loadV2flyCategories(){
     var xhr = new XMLHttpRequest();
@@ -279,6 +296,8 @@ function saveSettings(){
     custom_settings.awg_geo_v2fly_ip = document.getElementById('awg_geo_v2fly_ip').value;
     custom_settings.awg_geo_custom_domains = document.getElementById('geo_custom_domains').value;
     custom_settings.awg_geo_custom_ips = document.getElementById('geo_custom_ips').value;
+    custom_settings.awg_direct_custom_domains = normalizeListValue(document.getElementById('direct_custom_domains').value);
+    custom_settings.awg_direct_custom_ips = normalizeListValue(document.getElementById('direct_custom_ips').value);
     custom_settings.awg_geo_autoupdate = document.getElementById('geo_autoupdate').checked ? '1' : '0';
 
     // Basic validation
@@ -374,6 +393,11 @@ function loadGeoSettings(){
     if(cd) cd.value = custom_settings.awg_geo_custom_domains || '';
     var ci = document.getElementById('geo_custom_ips');
     if(ci) ci.value = custom_settings.awg_geo_custom_ips || '';
+    // Direct destination exceptions
+    var dd = document.getElementById('direct_custom_domains');
+    if(dd) dd.value = listToTextarea(custom_settings.awg_direct_custom_domains || '');
+    var di = document.getElementById('direct_custom_ips');
+    if(di) di.value = listToTextarea(custom_settings.awg_direct_custom_ips || '');
     // Auto-update
     var au = document.getElementById('geo_autoupdate');
     if(au) au.checked = (custom_settings.awg_geo_autoupdate === '1');
@@ -623,6 +647,8 @@ function updateStatusUI(s){
         if(s.active_rules > 0) infoParts.push(s.active_rules + ' routing rule(s)');
         if(s.ipset_count > 0) infoParts.push(s.ipset_count + ' IP ranges');
         if(s.geo_domains > 0) infoParts.push(s.geo_domains + ' domain rules');
+        if(s.direct_ipset_count > 0) infoParts.push(s.direct_ipset_count + ' direct IPs');
+        if(s.direct_domains > 0) infoParts.push(s.direct_domains + ' direct domains');
         rulesEl.innerHTML = infoParts.join(' &middot; ') || 'no rules active';
         rulesEl.style.color = '#93E7FF';
     } else {
@@ -1140,6 +1166,28 @@ function initAutocompleteIp(){
                 </table>
 
                 </div>
+
+                <!-- ==================== DIRECT EXCEPTIONS ==================== -->
+                <div class="awg-section">Direct Exceptions</div>
+                <table width="100%" border="1" cellpadding="4" cellspacing="0" class="FormTable" style="margin-top:8px;">
+                <thead><tr><td colspan="2">Bypass VPN for Destinations</td></tr></thead>
+                <tr>
+                    <th width="35%">Direct Domains</th>
+                    <td>
+                        <textarea class="input_32_table awg-textarea" id="direct_custom_domains"
+                                  placeholder="example.com&#10;another.org"></textarea>
+                        <div style="color:#666; font-size:11px; margin-top:3px;">One per line or comma-separated. DNS results are added to a direct ipset and bypass VPN.</div>
+                    </td>
+                </tr>
+                <tr>
+                    <th>Direct IPs / Subnets</th>
+                    <td>
+                        <textarea class="input_32_table awg-textarea" id="direct_custom_ips"
+                                  placeholder="203.0.113.10/32&#10;198.51.100.0/24"></textarea>
+                        <div style="color:#666; font-size:11px; margin-top:3px;">IPv4 addresses or CIDR ranges that should use WAN directly before VPN routing rules are evaluated.</div>
+                    </td>
+                </tr>
+                </table>
 
                 <!-- Apply -->
                 <div style="margin-top:12px; text-align:center;">
