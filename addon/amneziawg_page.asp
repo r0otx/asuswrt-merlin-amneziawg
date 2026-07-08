@@ -101,6 +101,12 @@
     font-family:monospace;
     font-size:12px;
 }
+.awg-help {
+    color:#B8C7C8;
+    font-size:11px;
+    margin-top:4px;
+    line-height:1.35;
+}
 </style>
 <script>
 var custom_settings = <% get_custom_settings(); %>;
@@ -276,6 +282,10 @@ function saveSettings(){
             if(fields[i] === 'awg_peer_allowedips' || fields[i] === 'awg_address' || fields[i] === 'awg_dns'){
                 v = v.replace(/\s+/g, '');
             }
+            if((fields[i] === 'awg_privatekey' || fields[i] === 'awg_peer_pubkey' || fields[i] === 'awg_peer_endpoint') &&
+               !v && custom_settings[fields[i]]){
+                continue;
+            }
             custom_settings[fields[i]] = v;
         }
     }
@@ -301,9 +311,9 @@ function saveSettings(){
     custom_settings.awg_geo_autoupdate = document.getElementById('geo_autoupdate').checked ? '1' : '0';
 
     // Basic validation
-    var pk = document.getElementById('awg_privatekey').value;
-    var pubk = document.getElementById('awg_peer_pubkey').value;
-    var ep = document.getElementById('awg_peer_endpoint').value;
+    var pk = (custom_settings.awg_privatekey || '').trim();
+    var pubk = (custom_settings.awg_peer_pubkey || '').trim();
+    var ep = (custom_settings.awg_peer_endpoint || '').trim();
     if(!pk || !pubk || !ep){
         alert('Required: Private Key, Peer Public Key, and Endpoint.');
         return;
@@ -1124,7 +1134,7 @@ function initAutocompleteIp(){
                         <input type="text" class="input_32_table" id="awg_geo_v2fly_ip" style="width:95%;" maxlength="512"
                             placeholder="telegram,google,facebook,twitter,netflix,cloudflare">
                         <br><span style="color:#888; font-size:11px;">Comma-separated. IP ranges for services: telegram, google, facebook, twitter, netflix, cloudflare, apple, amazon, microsoft, github, stripe, openai ...</span>
-                        <div style="color:#666; font-size:11px; margin-top:3px;">Works without DNS — direct IP matching. Ideal for Telegram, messengers, etc.</div>
+                        <div class="awg-help">Works without DNS — direct IP matching. Ideal for Telegram, messengers, etc.</div>
                     </td>
                 </tr>
                 </table>
@@ -1144,7 +1154,7 @@ function initAutocompleteIp(){
                     <td>
                         <input type="text" class="input_32_table" id="geo_custom_domains" style="width:95%;"
                                maxlength="2000" placeholder="example.com,another.org,service.net">
-                        <div style="color:#666; font-size:11px; margin-top:3px;">Comma-separated. DNS-resolved → routed through VPN</div>
+                        <div class="awg-help">Comma-separated. DNS-resolved → routed through VPN</div>
                     </td>
                 </tr>
                 <tr>
@@ -1152,7 +1162,7 @@ function initAutocompleteIp(){
                     <td>
                         <input type="text" class="input_32_table" id="geo_custom_ips" style="width:95%;"
                                maxlength="2000" placeholder="8.8.8.8,1.1.1.0/24,203.0.113.0/24">
-                        <div style="color:#666; font-size:11px; margin-top:3px;">Comma-separated IPs or CIDR subnets</div>
+                        <div class="awg-help">Comma-separated IPs or CIDR subnets</div>
                     </td>
                 </tr>
                 <tr>
@@ -1176,7 +1186,7 @@ function initAutocompleteIp(){
                     <td>
                         <textarea class="input_32_table awg-textarea" id="direct_custom_domains"
                                   placeholder="example.com&#10;another.org"></textarea>
-                        <div style="color:#666; font-size:11px; margin-top:3px;">One per line or comma-separated. DNS results are added to a direct ipset and bypass VPN.</div>
+                        <div class="awg-help">One per line or comma-separated. DNS results are added to a direct ipset and bypass VPN.</div>
                     </td>
                 </tr>
                 <tr>
@@ -1184,7 +1194,7 @@ function initAutocompleteIp(){
                     <td>
                         <textarea class="input_32_table awg-textarea" id="direct_custom_ips"
                                   placeholder="203.0.113.10/32&#10;198.51.100.0/24"></textarea>
-                        <div style="color:#666; font-size:11px; margin-top:3px;">IPv4 addresses or CIDR ranges that should use WAN directly before VPN routing rules are evaluated.</div>
+                        <div class="awg-help">IPv4 addresses or CIDR ranges that should use WAN directly before VPN routing rules are evaluated.</div>
                     </td>
                 </tr>
                 </table>
